@@ -6,10 +6,14 @@ import datetime
 from dateutil.relativedelta import relativedelta
 from sklearn.model_selection import train_test_split
 import numpy as np
-import scorecard_functions as sf
+from lessonTwo import scorecard_functions as sf
+import warnings
+# import scorecard_functions as sf
 
+warnings.filterwarnings('ignore')
 
 def CareerYear(x):
+    x = str(x)
     if x.find('n/a') > -1:
         return -1
     elif x.find("10+")>-1:
@@ -17,7 +21,8 @@ def CareerYear(x):
     elif x.find('< 1') > -1:
         return 0
     else:
-        return int(re.sub("\D", "", x))
+        c = re.sub(r'\D', "", x)
+        return c
 
 
 def DescExisting(x):
@@ -28,11 +33,11 @@ def DescExisting(x):
         return 'desc'
 
 
-def ConvertDateStr(x,format):
+def ConvertDateStr(x, format):
     if str(x) == 'nan':
-        return datetime.datetime.fromtimestamp(time.mktime(time.strptime('9900-1','%Y-%m')))
+        return datetime.datetime.fromtimestamp(time.mktime(time.strptime('1999-1', '%Y-%m')))
     else:
-        return datetime.datetime.fromtimestamp(time.mktime(time.strptime(x,format)))
+        return datetime.datetime.fromtimestamp(time.mktime(time.strptime(x, format)))
 
 
 def MonthGap(earlyDate, lateDate):
@@ -57,9 +62,9 @@ def MakeupMissing(x):
 # 3，数据集划分成训练集和测试集
 
 
-allData = pd.read_csv('D:/financialStudy/lessonTwo/application.csv',encoding='ISO-8859-1',header = 0)
+allData = pd.read_csv('D:/financialStudy/lessonTwo/application.csv', encoding='ISO-8859-1', header=0)
 
-allData['term'] = allData['term'].apply(lambda x: int(x.replace(' months','')))
+allData['term'] = allData['term'].apply(lambda x: int(x.replace(' months', '')))
 
 # 处理标签：Fully Paid是正常用户；Charged Off是违约用户
 allData['y'] = allData['loan_status'].map(lambda x: int(x == 'Charged Off'))
@@ -72,7 +77,7 @@ allData['y'] = allData['loan_status'].map(lambda x: int(x == 'Charged Off'))
 
 allData1 = allData.loc[allData.term == 36]
 
-trainData, testData = train_test_split(allData1,test_size=0.4)
+trainData, testData = train_test_split(allData1, test_size=0.4)
 
 
 '''
@@ -81,9 +86,6 @@ trainData, testData = train_test_split(allData1,test_size=0.4)
 （2）格式转换
 （3）确实值填补
 '''
-
-
-
 
 # 将带％的百分比变为浮点数
 trainData['int_rate_clean'] = trainData['int_rate'].map(lambda x: float(x.replace('%',''))/100)
@@ -95,24 +97,24 @@ trainData['emp_length_clean'] = trainData['emp_length'].map(CareerYear)
 trainData['desc_clean'] = trainData['desc'].map(DescExisting)
 
 # 处理日期。earliest_cr_line的格式不统一，需要统一格式且转换成python的日期
-trainData['app_date_clean'] = trainData['issue_d'].map(lambda x: ConvertDateStr(x,'%b-%y'))
+trainData['app_date_clean'] = trainData['issue_d'].map(lambda x: ConvertDateStr(x,'%y/%m/%dd'))
 trainData['earliest_cr_line_clean'] = trainData['earliest_cr_line'].map(lambda x: ConvertDateStr(x,'%b-%y'))
 
 # 处理mths_since_last_delinq。注意原始值中有0，所以用－1代替缺失
-trainData['mths_since_last_delinq_clean'] = trainData['mths_since_last_delinq'].map(lambda x:MakeupMissing(x))
+trainData['mths_since_last_delinq_clean'] = trainData['mths_since_last_delinq'].map(lambda x: MakeupMissing(x))
 
-trainData['mths_since_last_record_clean'] = trainData['mths_since_last_record'].map(lambda x:MakeupMissing(x))
+trainData['mths_since_last_record_clean'] = trainData['mths_since_last_record'].map(lambda x: MakeupMissing(x))
 
-trainData['pub_rec_bankruptcies_clean'] = trainData['pub_rec_bankruptcies'].map(lambda x:MakeupMissing(x))
+trainData['pub_rec_bankruptcies_clean'] = trainData['pub_rec_bankruptcies'].map(lambda x: MakeupMissing(x))
 
 '''
 第二步：变量衍生
 '''
 # 考虑申请额度与收入的占比
-trainData['limit_income'] = trainData.apply(lambda x: x.loan_amnt / x.annual_inc, axis = 1)
+trainData['limit_income'] = trainData.apply(lambda x: x.loan_amnt / x.annual_inc, axis=1)
 
 # 考虑earliest_cr_line到申请日期的跨度，以月份记
-trainData['earliest_cr_to_app'] = trainData.apply(lambda x: MonthGap(x.earliest_cr_line_clean,x.app_date_clean), axis = 1)
+trainData['earliest_cr_to_app'] = trainData.apply(lambda x: MonthGap(x.earliest_cr_line_clean, x.app_date_clean), axis=1)
 
 
 '''
