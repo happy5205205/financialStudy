@@ -21,7 +21,6 @@ def SplitData(df, col, numOfSplit, special_attribute=[]):
     return splitPoint
 
 
-
 def Chi2(df, total_col, bad_col, overallRate):
     '''
     :param df: 包含全部样本总计与坏样本总计的数据框
@@ -63,8 +62,7 @@ def BinBadRate(df, col, target, grantRateIndicator=0):
     return (dicts, regroup, overallRate)
 
 
-
-### ChiMerge_MaxInterval: split the continuous variable using Chi-square value by specifying the max number of intervals
+# ChiMerge_MaxInterval: split the continuous variable using Chi-square value by specifying the max number of intervals
 def ChiMerge(df, col, target, max_interval=5,special_attribute=[],minBinPcnt=0):
     '''
     :param df: 包含目标变量与分箱属性的数据框
@@ -198,7 +196,6 @@ def ChiMerge(df, col, target, max_interval=5,special_attribute=[],minBinPcnt=0):
         return cutOffPoints
 
 
-
 def UnsupervisedSplitBin(df,var,numOfSplit = 5, method = 'equal freq'):
     '''
     :param df: 数据集
@@ -220,7 +217,6 @@ def UnsupervisedSplitBin(df,var,numOfSplit = 5, method = 'equal freq'):
         interval_len = (var_max - var_min)*1.0/numOfSplit
         splitPoint = [var_min + i*interval_len for i in range(1,numOfSplit)]
         return splitPoint
-
 
 
 def AssignGroup(x, bin):

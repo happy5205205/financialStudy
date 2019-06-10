@@ -1,9 +1,12 @@
+# _*_ coding: utf-8 _*_
 import pandas as pd
 import re
 import time
 import datetime
 from dateutil.relativedelta import relativedelta
 from sklearn.model_selection import train_test_split
+import numpy as np
+import scorecard_functions as sf
 
 
 def CareerYear(x):
@@ -48,13 +51,14 @@ def MakeupMissing(x):
     else:
         return x
 
-
-
 # 数据预处理
 # 1，读入数据
 # 2，选择合适的建模样本
 # 3，数据集划分成训练集和测试集
-allData = pd.read_csv('C:/Users/OkO/Desktop/Financial Data Analsys/3nd Series/Data/application.csv',header = 0)
+
+
+allData = pd.read_csv('D:/financialStudy/lessonTwo/application.csv',encoding='ISO-8859-1',header = 0)
+
 allData['term'] = allData['term'].apply(lambda x: int(x.replace(' months','')))
 
 # 处理标签：Fully Paid是正常用户；Charged Off是违约用户
@@ -145,16 +149,16 @@ for var in cat_features:
 # （i）当取值<5时：如果每种类别同时包含好坏样本，无需分箱；如果有类别只包含好坏样本的一种，需要合并
 merge_bin = {}
 for col in less_value_features:
-    binBadRate = BinBadRate(trainData, col, 'y')[0]
+    binBadRate = sf.BinBadRate(trainData, col, 'y')[0]
     if min(binBadRate.values()) == 0 or max(binBadRate.values()) == 1:
         print('{} need to be combined'.format(col))
-        combine_bin = MergeBad0(trainData, col, 'y')
+        combine_bin = sf.MergeBad0(trainData, col, 'y')
         merge_bin[col] = combine_bin
 
 # （ii）当取值>5时：用bad rate进行编码，放入连续型变量里
 br_encoding_dict = {}
 for col in more_value_features:
-    br_encoding = BadRateEncoding(df, col, target)
+    br_encoding = sf.BadRateEncoding(df, col, target)
     trainData[col+'_br_encoding'] = br_encoding['encoding']
     br_encoding_dict[col] = br_encoding['bad_rate']
     num_features.append(col+'_br_encoding')
@@ -164,31 +168,31 @@ for col in num_features:
     print('{} is in processing'.format(col))
     if -1 not in set(trainData[col]):
         max_interval = 5
-        cutOff = ChiMerge(trainData, col, target, max_interval=max_interval,special_attribute=[],minBinPcnt=0)
+        cutOff = sf.ChiMerge(trainData, col, target, max_interval=max_interval,special_attribute=[],minBinPcnt=0)
         trainData[col+'_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff,special_attribute=[]))
-        monotone = BadRateMonotone(trainData, col+'_Bin', 'y')
+        monotone = sf.BadRateMonotone(trainData, col+'_Bin', 'y')
         while(not monotone):
             max_interval -= 1
-            cutOff = ChiMerge(trainData, col, target, max_interval=max_interval, special_attribute=[],
+            cutOff = sf.ChiMerge(trainData, col, target, max_interval=max_interval, special_attribute=[],
                                           minBinPcnt=0)
             trainData[col + '_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[]))
             if max_interval == 2:
                 # 当分箱数为2时，必然单调
                 break
-            monotone = BadRateMonotone(trainData, col + '_Bin', 'y')
+            monotone = sf.BadRateMonotone(trainData, col + '_Bin', 'y')
     else:
         max_interval = 5
-        cutOff = ChiMerge(trainData, col, target, max_interval=max_interval, special_attribute=[-1],
+        cutOff = sf.ChiMerge(trainData, col, target, max_interval=max_interval, special_attribute=[-1],
                                       minBinPcnt=0)
         trainData[col + '_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
-        monotone = BadRateMonotone(trainData, col + '_Bin', 'y')
+        monotone = sf.BadRateMonotone(trainData, col + '_Bin', 'y')
         while (not monotone):
             max_interval -= 1
-            cutOff = ChiMerge(trainData, col, target, max_interval=max_interval, special_attribute=[-1],
+            cutOff = sf.ChiMerge(trainData, col, target, max_interval=max_interval, special_attribute=[-1],
                                           minBinPcnt=0)
             trainData[col + '_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
             if max_interval == 2:
                 # 当分箱数为2时，必然单调
                 break
-            monotone = BadRateMonotone(trainData, col + '_Bin', 'y')
+            monotone = sf.BadRateMonotone(trainData, col + '_Bin', 'y')
 
