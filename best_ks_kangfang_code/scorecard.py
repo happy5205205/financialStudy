@@ -16,19 +16,27 @@ from sklearn.ensemble import RandomForestClassifier
 from numpy import log
 from sklearn.metrics import roc_auc_score
 import scorecard_functions_V3 as sf
+import warnings
+
+warnings.filterwarnings('ignore')
 
 
 
 def CareerYear(x):
     # 对工作年限进行转换
+    x = str(x)
     if x.find('n/a') > -1:
         return -1
     elif x.find("10+")>-1:   # 将"10＋years"转换成 11
         return 11
     elif x.find('< 1') > -1:  # 将"< 1 year"转换成 0
         return 0
+    # else:
+    #     return int(re.sub("\D", "", x))   #其余数据，去掉"years"并转换成整数
     else:
-        return int(re.sub("\D", "", x))   #其余数据，去掉"years"并转换成整数
+
+        c = re.sub(r'\D', "", x)
+        return c
 
 
 def DescExisting(x):
@@ -79,7 +87,7 @@ def MakeupMissing(x):
 # 3，数据集划分成训练集和测试集
 
 
-folderOfData = 'D:/financialStudy/best_ks_kangfang_code'
+folderOfData = 'D:/financialStudy/best_ks_kangfang_code/'
 
 
 allData = pd.read_csv(folderOfData + 'application.csv',header = 0, encoding = 'latin1')
