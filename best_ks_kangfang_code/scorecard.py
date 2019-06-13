@@ -1,4 +1,6 @@
+# _*_ coding:utf-8 _*_
 import pandas as pd
+import numpy as np
 import re
 import time
 import datetime
@@ -13,14 +15,17 @@ import statsmodels.api as sm
 from sklearn.ensemble import RandomForestClassifier
 from numpy import log
 from sklearn.metrics import roc_auc_score
+import scorecard_functions_V3 as sf
+
+
 
 def CareerYear(x):
-    #对工作年限进行转换
+    # 对工作年限进行转换
     if x.find('n/a') > -1:
         return -1
-    elif x.find("10+")>-1:   #将"10＋years"转换成 11
+    elif x.find("10+")>-1:   # 将"10＋years"转换成 11
         return 11
-    elif x.find('< 1') > -1:  #将"< 1 year"转换成 0
+    elif x.find('< 1') > -1:  # 将"< 1 year"转换成 0
         return 0
     else:
         return int(re.sub("\D", "", x))   #其余数据，去掉"years"并转换成整数
@@ -74,7 +79,7 @@ def MakeupMissing(x):
 # 3，数据集划分成训练集和测试集
 
 
-folderOfData = 'C:/Users/OkO/Desktop/Financial Data Analsys/3nd Series/Data/'
+folderOfData = 'D:/financialStudy/best_ks_kangfang_code'
 
 
 allData = pd.read_csv(folderOfData + 'application.csv',header = 0, encoding = 'latin1')
@@ -177,17 +182,17 @@ for var in cat_features:
 merge_bin_dict = {}  #存放需要合并的变量，以及合并方法
 var_bin_list = []   #由于某个取值没有好或者坏样本而需要合并的变量
 for col in less_value_features:
-    binBadRate = BinBadRate(trainData, col, 'y')[0]
+    binBadRate = sf.BinBadRate(trainData, col, 'y')[0]
     if min(binBadRate.values()) == 0 :  #由于某个取值没有坏样本而进行合并
         print '{} need to be combined due to 0 bad rate'.format(col)
-        combine_bin = MergeBad0(trainData, col, 'y')
+        combine_bin = sf.MergeBad0(trainData, col, 'y')
         merge_bin_dict[col] = combine_bin
         newVar = col + '_Bin'
         trainData[newVar] = trainData[col].map(combine_bin)
         var_bin_list.append(newVar)
     if max(binBadRate.values()) == 1:    #由于某个取值没有好样本而进行合并
         print '{} need to be combined due to 0 good rate'.format(col)
-        combine_bin = MergeBad0(trainData, col, 'y',direction = 'good')
+        combine_bin = sf.MergeBad0(trainData, col, 'y',direction = 'good')
         merge_bin_dict[col] = combine_bin
         newVar = col + '_Bin'
         trainData[newVar] = trainData[col].map(combine_bin)
@@ -205,7 +210,7 @@ less_value_features = [i for i in less_value_features if i + '_Bin' not in var_b
 # （ii）当取值>5时：用bad rate进行编码，放入连续型变量里
 br_encoding_dict = {}   #记录按照bad rate进行编码的变量，及编码方式
 for col in more_value_features:
-    br_encoding = BadRateEncoding(trainData, col, 'y')
+    br_encoding = sf.BadRateEncoding(trainData, col, 'y')
     trainData[col+'_br_encoding'] = br_encoding['encoding']
     br_encoding_dict[col] = br_encoding['bad_rate']
     num_features.append(col+'_br_encoding')
@@ -221,41 +226,41 @@ for col in num_features:
     print "{} is in processing".format(col)
     if -1 not in set(trainData[col]):   #－1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
         max_interval = 5   #分箱后的最多的箱数
-        cutOff = ChiMerge(trainData, col, 'y', max_interval=max_interval,special_attribute=[],minBinPcnt=0)
-        trainData[col+'_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff,special_attribute=[]))
-        monotone = BadRateMonotone(trainData, col+'_Bin', 'y')   # 检验分箱后的单调性是否满足
+        cutOff = sf.ChiMerge(trainData, col, 'y', max_interval=max_interval,special_attribute=[],minBinPcnt=0)
+        trainData[col+'_Bin'] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff,special_attribute=[]))
+        monotone = sf.BadRateMonotone(trainData, col+'_Bin', 'y')   # 检验分箱后的单调性是否满足
         while(not monotone):
             # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
             max_interval -= 1
-            cutOff = ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[],
+            cutOff = sf.ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[],
                                           minBinPcnt=0)
-            trainData[col + '_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[]))
+            trainData[col + '_Bin'] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff, special_attribute=[]))
             if max_interval == 2:
                 # 当分箱数为2时，必然单调
                 break
-            monotone = BadRateMonotone(trainData, col + '_Bin', 'y')
+            monotone = sf.BadRateMonotone(trainData, col + '_Bin', 'y')
         newVar = col + '_Bin'
-        trainData[newVar] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[]))
+        trainData[newVar] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff, special_attribute=[]))
         var_bin_list.append(newVar)
     else:
         max_interval = 5
         # 如果有－1，则除去－1后，其他取值参与分箱
-        cutOff = ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[-1],
+        cutOff = sf.ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[-1],
                                       minBinPcnt=0)
-        trainData[col + '_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
-        monotone = BadRateMonotone(trainData, col + '_Bin', 'y',['Bin -1'])
+        trainData[col + '_Bin'] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff, special_attribute=[-1]))
+        monotone = sf.BadRateMonotone(trainData, col + '_Bin', 'y',['Bin -1'])
         while (not monotone):
             max_interval -= 1
             # 如果有－1，－1的bad rate不参与单调性检验
-            cutOff = ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[-1],
+            cutOff = sf.ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[-1],
                                           minBinPcnt=0)
-            trainData[col + '_Bin'] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+            trainData[col + '_Bin'] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff, special_attribute=[-1]))
             if max_interval == 3:
                 # 当分箱数为3-1=2时，必然单调
                 break
-            monotone = BadRateMonotone(trainData, col + '_Bin', 'y',['Bin -1'])
+            monotone = sf.BadRateMonotone(trainData, col + '_Bin', 'y',['Bin -1'])
         newVar = col + '_Bin'
-        trainData[newVar] = trainData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+        trainData[newVar] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff, special_attribute=[-1]))
         var_bin_list.append(newVar)
     continous_merged_dict[col] = cutOff
 
@@ -276,7 +281,7 @@ IV_dict = {}
 # 4，连续变量。分箱后新的变量存放在var_bin_list中
 all_var = var_bin_list  + less_value_features
 for var in all_var:
-    woe_iv = CalcWOE(trainData, var, 'y')
+    woe_iv = sf.CalcWOE(trainData, var, 'y')
     WOE_dict[var] = woe_iv['WOE']
     IV_dict[var] = woe_iv['IV']
 
@@ -458,7 +463,7 @@ for C_penalty in np.arange(0.005, 0.2,0.005):
         y_pred = LR_model_2_fit.predict_proba(X_test)[:,1]
         scorecard_result = pd.DataFrame({'prob':y_pred, 'target':y_test})
         #performance = KS_AR(scorecard_result,'prob','target')
-        KS = performance['KS']
+        KS = sf.performance['KS']
         model_parameter[(C_penalty, bad_weight)] = KS
 
 # endtime = datetime.datetime.now()

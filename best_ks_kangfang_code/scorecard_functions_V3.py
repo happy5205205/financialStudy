@@ -1,4 +1,7 @@
+# _*_coding:utf-8 _*_
+
 import numpy as np
+
 import pandas as pd
 
 def SplitData(df, col, numOfSplit, special_attribute=[]):
