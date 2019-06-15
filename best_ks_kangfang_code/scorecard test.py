@@ -82,6 +82,7 @@ for var in var_in_model:
 
     # 有些取值个数少、但是需要合并的变量
     if var1 in merge_bin_dict.keys():
+        
         print "{} need to be regrouped".format(var1)
         testData[var1 + '_Bin'] = testData[var1].map(merge_bin_dict[var1])
 

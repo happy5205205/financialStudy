@@ -1,8 +1,8 @@
 # _*_coding:utf-8 _*_
 
 import numpy as np
-
 import pandas as pd
+
 
 def SplitData(df, col, numOfSplit, special_attribute=[]):
     '''
@@ -94,7 +94,7 @@ def BinBadRate(df, col, target, grantRateIndicator=0):
     regroup = total.merge(bad, left_index=True, right_index=True, how='left')
     regroup.reset_index(level=0, inplace=True)
     regroup['bad_rate'] = regroup.apply(lambda x: x.bad * 1.0 / x.total, axis=1)
-    dicts = dict(zip(regroup[col],regroup['bad_rate']))
+    dicts = dict(zip(regroup[col], regroup['bad_rate']))
     if grantRateIndicator==0:
         return (dicts, regroup)
     N = sum(regroup['total'])
@@ -103,8 +103,7 @@ def BinBadRate(df, col, target, grantRateIndicator=0):
     return (dicts, regroup, overallRate)
 
 
-
-### ChiMerge_MaxInterval: split the continuous variable using Chi-square value by specifying the max number of intervals
+# ChiMerge_MaxInterval: split the continuous variable using Chi-square value by specifying the max number of intervals
 def ChiMerge(df, col, target, max_interval=5,special_attribute=[],minBinPcnt=0):
     '''
     :param df: 包含目标变量与分箱属性的数据框
@@ -117,7 +116,7 @@ def ChiMerge(df, col, target, max_interval=5,special_attribute=[],minBinPcnt=0):
     '''
     colLevels = sorted(list(set(df[col])))
     N_distinct = len(colLevels)
-    if N_distinct <= max_interval:  #如果原始属性的取值个数低于max_interval，不执行这段函数
+    if N_distinct <= max_interval:  # 如果原始属性的取值个数低于max_interval，不执行这段函数
         print "The number of original levels for {} is less than or equal to max intervals".format(col)
         return colLevels[:-1]
     else:
@@ -297,7 +296,7 @@ def BadRateEncoding(df, col, target):
     for k, v in br_dict.items():
         br_dict[k] = v['bad_rate']
     badRateEnconding = df[col].map(lambda x: br_dict[x])
-    return {'encoding':badRateEnconding, 'bad_rate':br_dict}
+    return {'encoding': badRateEnconding, 'bad_rate': br_dict}
 
 
 def AssignBin(x, cutOffPoints,special_attribute=[]):
@@ -351,8 +350,7 @@ def CalcWOE(df, col, target):
     return {"WOE": WOE_dict, 'IV':IV}
 
 
-
-## 判断某变量的坏样本率是否单调
+# 判断某变量的坏样本率是否单调
 def BadRateMonotone(df, sortByVar, target,special_attribute = []):
     '''
     :param df: 包含检验坏样本率的变量，和目标变量
@@ -389,7 +387,7 @@ def MergeBad0(df,col,target, direction='bad'):
         regroup = regroup.sort_values(by  = 'bad_rate')
     else:
         # 如果是合并0好样本样本率的组，则跟最小的非0好样本率的组进行合并
-        regroup = regroup.sort_values(by='bad_rate',ascending=False)
+        regroup = regroup.sort_values(by='bad_rate', ascending=False)
     regroup.index = range(regroup.shape[0])
     col_regroup = [[i] for i in regroup[col]]
     del_index = []
