@@ -225,9 +225,9 @@ continous_merged_dict = {}
 for col in num_features:
     print "{} is in processing".format(col)
     if -1 not in set(trainData[col]):   # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
-        max_interval = 5   # 分箱后的最多的箱数
-        cutOff = sf.ChiMerge(trainData, col, 'y', max_interval=max_interval,special_attribute=[],minBinPcnt=0)
-        trainData[col+'_Bin'] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff,special_attribute=[]))
+        max_interval = 3   # 分箱后的最多的箱数
+        cutOff = sf.ChiMerge(trainData, col, 'y', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
+        trainData[col+'_Bin'] = trainData[col].map(lambda x: sf.AssignBin(x, cutOff, special_attribute=[]))
         monotone = sf.BadRateMonotone(trainData, col+'_Bin', 'y')   # 检验分箱后的单调性是否满足
         while(not monotone):
             # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
@@ -448,8 +448,8 @@ for C_penalty in np.arange(0.005, 0.2,0.005):
         LR_model_2_fit = LR_model_2.fit(X_train,y_train)
         y_pred = LR_model_2_fit.predict_proba(X_test)[:,1]
         scorecard_result = pd.DataFrame({'prob':y_pred, 'target':y_test})
-        #performance = KS_AR(scorecard_result,'prob','target')
-        KS = sf.performance['KS']
+        # performance = KS_AR(scorecard_result, 'prob', 'target')
+        KS = performance['KS']
         model_parameter[(C_penalty, bad_weight)] = KS
 
 # endtime = datetime.datetime.now()

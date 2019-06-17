@@ -17,7 +17,7 @@ def SplitData(df, col, numOfSplit, special_attribute=[]):
         df2 = df.loc[~df[col].isin(special_attribute)]
     N = df2.shape[0]
     n = N/numOfSplit
-    splitPointIndex = [i*n for i in range(1,numOfSplit)]
+    splitPointIndex = [i*n for i in range(1, numOfSplit)]
     rawValues = sorted(list(df2[col]))
     splitPoint = [rawValues[i] for i in splitPointIndex]
     splitPoint = sorted(list(set(splitPoint)))
@@ -58,7 +58,7 @@ def Chi2(df, total_col, bad_col):
     df2['goodExpected'] = df[total_col].apply(lambda x: x * goodRate)
     badCombined = zip(df2['badExpected'], df2[bad_col])
     goodCombined = zip(df2['goodExpected'], df2['good'])
-    badChi = [(i[0]-i[1])**2/i[0] for i in badCombined]
+    badChi = [(i[0]-i[1])**2/(i[0] + 0.00001) for i in badCombined]
     goodChi = [(i[0] - i[1]) ** 2 / i[0] for i in goodCombined]
     chi2 = sum(badChi) + sum(goodChi)
     return chi2
