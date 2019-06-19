@@ -112,7 +112,7 @@ testDataFile.close()
 第一步：数据预处理，包括
 （1）数据清洗
 （2）格式转换
-（3）确实值填补
+（3）缺失值填补
 '''
 
 # 将带％的百分比变为浮点数
@@ -371,9 +371,11 @@ pvals = LR.pvalues
 pvals = pvals.to_dict()
 
 # 有些变量不显著，需要逐步剔除
-varLargeP = {k: v for k,v in pvals.items() if v >= 0.1}
+varLargeP = {k: v for k, v in pvals.items() if v >= 0.1}
 varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
-while(len(varLargeP) > 0 and len(multi_analysis) > 0):
+
+while (len(varLargeP) > 0 and len(multi_analysis) > 0):
+
     # 每次迭代中，剔除最不显著的变量，直到
     # (1) 剩余所有变量均显著
     # (2) 没有特征可选
@@ -437,6 +439,7 @@ X = np.matrix(X)
 y = trainData['y']
 y = np.array(y)
 
+'''
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=0)
 X_train.shape, y_train.shape
 #
@@ -476,4 +479,4 @@ X['intercept'] = [1]*X.shape[0]
 
 LR = sm.Logit(y, X).fit()
 summary = LR.summary()
-
+'''
