@@ -17,6 +17,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+
 def CareerYear(x):
     # 对工作年限进行修改
     x = str(x)
@@ -68,7 +69,7 @@ def MonthGap(earlyDate, lateDate):
         gap = relativedelta(lateDate, earlyDate)
         yr = gap.years
         mth = gap.months
-        return yr*12+mth
+        return yr * 12 + mth
     else:
         return 0
 
@@ -83,9 +84,9 @@ def BinBadRate(df, col, target, grantRateIndicator=0):
         :return: 每箱的坏样本率，以及总体的坏样本率（当grantRateIndicator＝＝1时）
     """
     total = df.groupby([col])[target].count()
-    total = pd.DataFrame({'total':total})
+    total = pd.DataFrame({'total': total})
     bad = df.groupby([col])[target].sum()
-    bad = pd.DataFrame({'bad':bad})
+    bad = pd.DataFrame({'bad': bad})
     regroup = total.merge(bad, left_index=True, right_index=True, how='left')
     regroup.reset_index(level=0, inplace=True)
     regroup['bad_rate'] = regroup.apply(lambda x: x.bad * 1.0 / x.total, axis=1)
@@ -118,15 +119,15 @@ def MergeBad0(df, col, target, direction='bad'):
     col_regroup = [[i] for i in regroup[col]]
     del_index = []
     for i in range(regroup.shape[0] - 1):
-        col_regroup[i+1] = col_regroup[i] + col_regroup[i+1]
+        col_regroup[i + 1] = col_regroup[i] + col_regroup[i + 1]
         del_index.append(i)
         if direction == 'bad':
-            if regroup['bad_rate'][i+1] > 0:
+            if regroup['bad_rate'][i + 1] > 0:
                 break
         else:
-            if regroup['bad_rate'][i+1] < 1:
+            if regroup['bad_rate'][i + 1] < 1:
                 break
-    col_regroup2= [col_regroup[i] for i in range(len(col_regroup)) if i not in del_index]
+    col_regroup2 = [col_regroup[i] for i in range(len(col_regroup)) if i not in del_index]
     newGroup = {}
     for i in range(len(col_regroup2)):
         for g2 in col_regroup2[i]:
@@ -146,7 +147,7 @@ def BadRateEncoding(df, col, target):
     br_dict = regroup[[col, 'bad_rate']].set_index([col]).to_dict(orient='index')
     for k, v in br_dict.items():
         br_dict[k] = v['bad_rate']
-    badRateEnconding = df[col].map(lambda x:br_dict[x])
+    badRateEnconding = df[col].map(lambda x: br_dict[x])
     return {'encoding': badRateEnconding, 'bad_rate': br_dict}
 
 
@@ -156,7 +157,6 @@ def BadRateEncoding(df, col, target):
 
 
 def SplitData(df, col, numOfSplit, special_attribute=[]):
-
     """
     :param df: 按照col排序后的数据集
     :param col: 待分箱的变量
@@ -169,7 +169,7 @@ def SplitData(df, col, numOfSplit, special_attribute=[]):
         df2 = df.loc[~df[col].isin(special_attribute)]
     N = df2.shape[0]
     n = N / numOfSplit
-    splitPointIndex = [i*n for i in range(1, numOfSplit)]
+    splitPointIndex = [i * n for i in range(1, numOfSplit)]
     rawValues = sorted(list(df2[col]))
     splitPoint = [rawValues[i] for i in splitPointIndex]
     splitPoint = sorted(list(set(splitPoint)))
@@ -188,9 +188,9 @@ def AssignGroup(x, bin):
     elif x > max(bin):
         return 10e10
     else:
-        for i in range(N-1):
-            if bin[i] < x <= bin[i+1]:
-                return bin[i+1]
+        for i in range(N - 1):
+            if bin[i] < x <= bin[i + 1]:
+                return bin[i + 1]
 
 
 def Chi2(df, total_col, bad_col):
@@ -202,17 +202,17 @@ def Chi2(df, total_col, bad_col):
     """
     df2 = df.copy()
     # 求出df中总体的坏样本率和好样本率
-    badRate = sum(df2[bad_col])*1.0 / sum(df2[total_col])
+    badRate = sum(df2[bad_col]) * 1.0 / sum(df2[total_col])
     df2['good'] = df2.apply(lambda x: x[total_col] - x[bad_col], axis=1)
     # df2['good'] = df2.apply(lambda x: x.total_col-x.bad_col, axis=1)
-    goodRate = sum(df2['good'])*1.0 / sum(df2[total_col])
+    goodRate = sum(df2['good']) * 1.0 / sum(df2[total_col])
     # 期望坏（好）样本个数＝全部样本个数*平均坏（好）样本占比
-    df2['badExpected'] = df[total_col].apply(lambda x: x*badRate)
-    df2['goodExpected'] = df[total_col].apply(lambda x: x*goodRate)
+    df2['badExpected'] = df[total_col].apply(lambda x: x * badRate)
+    df2['goodExpected'] = df[total_col].apply(lambda x: x * goodRate)
     badCombined = zip(df2['badExpected'], df2[bad_col])
-    goodCombined  =zip(df2['goodExpected'], df2['good'])
-    badChi = [(i[0]-i[1])**2/(i[0]+0.00001) for i in badCombined]
-    goodChi = [(i[0]-i[1])**2 / i[0] for i in goodCombined]
+    goodCombined = zip(df2['goodExpected'], df2['good'])
+    badChi = [(i[0] - i[1]) ** 2 / (i[0] + 0.00001) for i in badCombined]
+    goodChi = [(i[0] - i[1]) ** 2 / i[0] for i in goodCombined]
     chi2 = sum(badChi) + sum(goodChi)
     return chi2
 
@@ -227,16 +227,16 @@ def AssignBin(x, cutOffPoints, special_attribute=[]):
     """
     numBin = len(cutOffPoints) + 1 + len(special_attribute)
     if x in special_attribute:
-        i = special_attribute.index(x)+1
-        return 'Bin {}'.format(0-i)
+        i = special_attribute.index(x) + 1
+        return 'Bin {}'.format(0 - i)
     if x <= cutOffPoints[0]:
         return 'Bin 0'
     elif x > cutOffPoints[-1]:
-        return 'Bin {}'.format(numBin-1)
+        return 'Bin {}'.format(numBin - 1)
     else:
-        for i in range(0, numBin-1):
-            if cutOffPoints[i] < x < cutOffPoints[i+1]:
-                return 'Bin {}'.format(i+1)
+        for i in range(0, numBin - 1):
+            if cutOffPoints[i] < x < cutOffPoints[i + 1]:
+                return 'Bin {}'.format(i + 1)
 
 
 def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0):
@@ -252,10 +252,10 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
     colLevels = sorted(list(set(df[col])))
     N_distinct = len(colLevels)
     if N_distinct <= max_interval:
-        print "The number of original levels for {} is less than or equal to max intervals".format(col)
+        print("The number of original levels for {} is less than or equal to max intervals".format(col))
         return colLevels[:-1]
     else:
-        if len(special_attribute) >=1:
+        if len(special_attribute) >= 1:
             df1 = df.loc[df[col].isin(special_attribute)]
             df2 = df.loc[~df[col].isin(special_attribute)]
         else:
@@ -265,7 +265,7 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
         # 步骤一：通过col对数据集进行分组，求出每组的总样本数和坏样本数
         if N_distinct > 100:
             split_x = SplitData(df=df2, col=col, numOfSplit=100)
-            print split_x
+            print(split_x)
             df2['temp'] = df2[col].map(lambda x: AssignGroup(x, split_x))
         else:
             df2['temp'] = df2[col]
@@ -286,7 +286,7 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
             # 每次循环时, 计算合并相邻组别后的卡方值。具有最小卡方值的合并方案，是最优方案
             chisqList = []
             for k in range(len(groupIntervals) - 1):
-                temp_group = groupIntervals[k] + groupIntervals[k+1]
+                temp_group = groupIntervals[k] + groupIntervals[k + 1]
                 df2b = regroup.loc[regroup['temp'].isin(temp_group)]
                 chisq = Chi2(df2b, 'total', 'bad')
                 chisqList.append(chisq)
@@ -317,7 +317,7 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
                 # 和前一箱进行合并，并且计算卡方值
                 currentIndex = list(regroup.temp_Bin).index(bin)
                 prevIndex = list(regroup.temp_Bin)[currentIndex - 1]
-                df3= df2.loc[df2['temp_Bin'].isin([prevIndex, bin])]
+                df3 = df2.loc[df2['temp_Bin'].isin([prevIndex, bin])]
                 (binBadRate, df2b) = BinBadRate(df=df3, col='temp_Bin', target='target')
                 chisq1 = Chi2(df2b, 'total', 'bad')
                 # 和后一箱进行合并，并且计算卡方值
@@ -342,10 +342,10 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
             df2['temp_Bin'] = groupdvalues
             valuesCounts = groupdvalues.value_counts().to_frame()
             N = sum(valuesCounts['temp'])
-            valuesCounts['pcnt'] = valuesCounts['temp'].apply(lambda x: x*1.0 / N)
+            valuesCounts['pcnt'] = valuesCounts['temp'].apply(lambda x: x * 1.0 / N)
             valuesCounts = valuesCounts.sort_index()
             minPcnt = min(valuesCounts['pcnt'])
-            while minPcnt < minBinPcnt and len(cutOffPoints) >2:
+            while minPcnt < minBinPcnt and len(cutOffPoints) > 2:
                 # 找出占比最小的箱
                 indexForMinPcnt = valuesCounts[valuesCounts['pcnt'] == minPcnt].index.tolist()[0]
                 # 如果占比最小的箱是最后一箱，则需要和上一个箱进行合并，也就意味着分裂点cutOffPoints中的最后一个需要移除
@@ -378,15 +378,13 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
         return cutOffPoints
 
 
-
-
 def main():
     data_path = './data'
     outPath = './result/'
     if not os.path.exists(outPath):
         os.mkdir(outPath)
 
-    allData = pd.read_csv(os.path.join(data_path, 'application.csv'))
+    allData = pd.read_csv(os.path.join(data_path, 'application.csv'), encoding='latin1')
     allData['term'] = allData['term'].apply(lambda x: int(x.replace('months', '')))
     # target 处理，loan_status标签中Fully Paid是正常客户  Charged Off是违约客户
     allData['target'] = allData['loan_status'].apply(lambda x: int(x == 'Charged Off'))
@@ -395,27 +393,27 @@ def main():
     '''
     allData['term'] = allData[allData['term'] == 36]
 
-    trainData, testData = train_test_split(allData, test_size=1/4)
+    trainData, testData = train_test_split(allData, test_size=1 / 4)
 
     # 固话变量
-    trainDataFile = open(outPath+'trainData.pkl', 'w')
-    pickle.dump(trainData, trainDataFile)
-    trainDataFile.close()
-
-    testDataFile = open(outPath+'testDataFile.pkl', 'w')
-    pickle.dump(testData, testDataFile)
-    testDataFile.close()
+    # trainDataFile = open(outPath + 'trainData.pkl', 'wr')
+    # pickle.dump(trainData, trainDataFile)
+    # trainDataFile.close()
+    #
+    # testDataFile = open(outPath + 'testDataFile.pkl', 'w')
+    # pickle.dump(testData, testDataFile)
+    # testDataFile.close()
 
     '''
         第一步数据预处理
         1、数据清洗
         2、格式转换
         3、缺失值处理
-        
+
     '''
 
     # 将带%的百分比变为浮点数
-    trainData['int_rate_clean'] = trainData['int_rate'].apply(lambda x: float(x.replace('%', ''))/100)
+    trainData['int_rate_clean'] = trainData['int_rate'].apply(lambda x: float(x.replace('%', '')) / 100)
 
     # 将工作年限进行转换
     trainData['emp_length_clean'] = trainData['emp_length'].map(CareerYear)
@@ -438,9 +436,10 @@ def main():
     '''
 
     # 考虑申请额度于收入的占比
-    trainData['limit_income'] = trainData.apply(lambda x: x.loan_amnt/x.annual_inc, axis=1)
+    trainData['limit_income'] = trainData.apply(lambda x: x.loan_amnt / x.annual_inc, axis=1)
     # 考虑earliest_cr_line到申请日期的跨度，以月份记
-    trainData['earliest_cr_to_app'] = trainData.apply(lambda x: MonthGap(x.earliest_cr_line_clean, x.app_data_clean), axis=1)
+    trainData['earliest_cr_to_app'] = trainData.apply(lambda x: MonthGap(x.earliest_cr_line_clean, x.app_data_clean),
+                                                      axis=1)
 
     '''
         第三步：分箱，采用ChiMerge，要求分箱完成之后
@@ -479,18 +478,18 @@ def main():
 
     for col in less_value_feature:
         binBadRate = BinBadRate(df=trainData, col=col, target='target')[0]
-        print '{}的取值根据标签分组不同属性的坏样本比例为{}'.format(col,binBadRate)
+        print('{}的取值根据标签分组不同属性的坏样本比例为{}'.format(col, binBadRate))
         if min(binBadRate.values()) == 0:
-            print '{}标签中存在坏样本比例为0，需要合并'.format(col)
+            print('{}标签中存在坏样本比例为0，需要合并'.format(col))
             combine_bin = MergeBad0(df=trainData, col=col, target='target')
-            print combine_bin
+            print(combine_bin)
             merge_bin_dict[col] = combine_bin
             newVar = col + '_Bin'
             trainData[newVar] = trainData[col].map(combine_bin)
             var_bin_list.append(newVar)
 
         if max(binBadRate.values()) == 1:
-            print '{}标签中存在好样本比例为0，需要合并'.format(col)
+            print('{}标签中存在好样本比例为0，需要合并'.format(col))
             combine_bin = MergeBad0(df=trainData, col=col, target='target')
             merge_bin_dict[col] = combine_bin
             newVar = col + '_Bin'
@@ -498,35 +497,36 @@ def main():
             var_bin_list.append(newVar)
 
     # 保存需要合并的变量，以及合并方法merge_bin_dict
-    merge_bin_dict_file = open(outPath + 'merge_bin_dict.pkl', 'w')
-    pickle.dump(merge_bin_dict, merge_bin_dict_file)
-    merge_bin_dict_file.close()
+    # merge_bin_dict_file = open(outPath + 'merge_bin_dict.pkl', 'w')
+    # pickle.dump(merge_bin_dict, merge_bin_dict_file)
+    # merge_bin_dict_file.close()
 
     # less_value_feature中剔除不需要合并的变量
-    less_value_feature = [i for i in less_value_feature if i+'_Bin' not in var_bin_list]
+    less_value_feature = [i for i in less_value_feature if i + '_Bin' not in var_bin_list]
 
     # （ii）当取值>5时：用bad rate进行编码，放入连续型变量里
     br_encoding_dict = {}  # 记录按照bad rate进行编码的变量，及编码方式
     for col in more_value_feature:
         br_encoding = BadRateEncoding(df=trainData, col=col, target='target')
-        print br_encoding
-        trainData[col+'_br_encoding'] = br_encoding['encoding']
+        print(br_encoding)
+        trainData[col + '_br_encoding'] = br_encoding['encoding']
         br_encoding_dict[col] = br_encoding['bad_rate']
-        num_features.append(col+'_br_encoding')
+        num_features.append(col + '_br_encoding')
 
     # 保存需要用坏样本率编码的变量br_encoding_dict
-    br_encoding_dict_file = open(outPath+'br_encoding_dict.pkl', 'w')
-    pickle.dump(br_encoding_dict, br_encoding_dict_file)
-    br_encoding_dict_file.close()
+    br_encoding_dict_file = open(outPath + 'br_encoding_dict.pkl', 'w')
+    # pickle.dump(br_encoding_dict, br_encoding_dict_file)
+    # br_encoding_dict_file.close()
 
     # （iii）对连续型变量进行分箱，包括（ii）中的变量
     continous_merged_dict = {}
     for col in num_features:
-        print '{} is in processing'
+        print('{} is in processing')
         if -1 not in set(trainData[col]):  # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
             max_interval = 5  # 分箱后的最多的箱数
-            cutOff = ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
-            print cutOff
+            cutOff = ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[],
+                              minBinPcnt=0)
+            print (cutOff)
 
 
 if __name__ == '__main__':
