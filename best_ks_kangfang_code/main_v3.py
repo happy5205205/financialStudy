@@ -14,6 +14,7 @@ import time
 import numpy as np
 from dateutil.relativedelta import relativedelta
 import warnings
+import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore')
 
@@ -401,6 +402,36 @@ def BadRateMonotone(df, sortByVar, target, special_attribute=[]):
     else:
         return True
 
+
+def CalcWOE(df, col, target):
+    """
+    功能：计算woe和iv
+    :param df: 包含需要计算WOE的变量和目标变量
+    :param col: 需要计算WOE、IV的变量，必须是分箱后的变量，或者不需要分箱的类别型变量
+    :param target: 目标变量，0、1表示好、坏
+    :return: 返回WOE和IV
+    """
+    total = df.groupby(col)[target].count()
+    total = pd.DataFrame({'total': total})
+    bad = df.groupby(col)[target].sum()
+    bad = pd.DataFrame({'bad': bad})
+    regroup = total.merge(bad, how='left', left_index=True, right_index=True)
+    regroup.reset_index(level=0, inplace=True)
+    N = sum(regroup['total'])
+    B= sum(regroup['bad'])
+    regroup['good'] = regroup['total'] - regroup['bad']
+    G = N - B
+    regroup['bad_pcnt'] = regroup['bad'].map(lambda x: x*1.0/B)
+    regroup['good_pcnt'] = regroup['good'].map(lambda x: x*1.0/G)
+    regroup['WOE'] = regroup.apply(lambda x: np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
+    WOE_dict = regroup[[col, 'WOE']].set_index(col).to_dict(orient='index')
+    for k, v in WOE_dict.items():
+        WOE_dict[k] = v['WOE']
+    IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*(np.log(x.good_pcnt*1.0/x.bad_pcnt)), axis=1)
+    IV = sum(IV)
+    return {'WOE': WOE_dict, 'IV': IV}
+
+
 def main():
     data_path = './data'
     outPath = './result/'
@@ -592,6 +623,43 @@ def main():
     continous_merged_dict_file = open(outPath+'continous_merged_dict.pkl', 'wb')
     pickle.dump(continous_merged_dict, continous_merged_dict_file)
     continous_merged_dict_file.close()
+
+    '''
+        第四步：WOE编码、计算IV
+    '''
+    WOE_dict = {}
+    IV_dict = {}
+    # 分箱后的变量进行编码，包括：
+    # 1，初始取值个数小于5，且不需要合并的类别型变量。存放在less_value_features中
+    # 2，初始取值个数小于5，需要合并的类别型变量。合并后新的变量存放在var_bin_list中
+    # 3，初始取值个数超过5，需要合并的类别型变量。合并后新的变量存放在var_bin_list中
+    # 4，连续变量。分箱后新的变量存放在var_bin_list中
+    all_var = var_bin_list + less_value_feature
+    for var in all_var:
+        woe_iv = CalcWOE(trainData, col, 'target')
+        WOE_dict[var] = woe_iv['WOE']
+        IV_dict[var] = woe_iv['IV']
+
+    # 保存变量每个分箱的WOE值
+    WOE_dict_file = open(outPath + 'WOE_dict.pkl', 'wb')
+    pickle.dump(WOE_dict, WOE_dict_file)
+    WOE_dict_file.close()
+
+    # 保存变量的IV值
+    IV_dict_file = open(outPath + 'IV_dict.pkl', 'wb')
+    pickle.dump(IV_dict, IV_dict_file)
+    IV_dict_file.close()
+
+    # 将变量IV值进行降序排列，方便后续挑选变量
+    IV_dict_sorted = sorted(IV_dict.items(), key=lambda x: x[1], reverse=True)
+
+    IV_values = [i[1] for i in IV_dict_sorted]
+    IV_name = [i[0] for i in IV_dict_sorted]
+
+    plt.title('feature IV')
+    plt.bar(range(len(IV_values)), IV_values)
+    plt.show()
+
 
 
 if __name__ == '__main__':
