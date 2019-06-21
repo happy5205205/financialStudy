@@ -255,7 +255,7 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
         print "The number of original levels for {} is less than or equal to max intervals".format(col)
         return colLevels[:-1]
     else:
-        if len(special_attribute) >=1:
+        if len(special_attribute) >= 1:
             df1 = df.loc[df[col].isin(special_attribute)]
             df2 = df.loc[~df[col].isin(special_attribute)]
         else:
