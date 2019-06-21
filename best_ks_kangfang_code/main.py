@@ -522,7 +522,7 @@ def main():
     # （iii）对连续型变量进行分箱，包括（ii）中的变量
     continous_merged_dict = {}
     for col in num_features:
-        print '{} is in processing'
+        print '{} is in processing'.format(col)
         if -1 not in set(trainData[col]):  # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
             max_interval = 5  # 分箱后的最多的箱数
             cutOff = ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
