@@ -216,7 +216,7 @@ for col in more_value_features:
     num_features.append(col+'_br_encoding')
 
 file2 = open(folderOfData+'br_encoding_dict.pkl','w')
-pickle.dump(br_encoding_dict,file2)
+pickle.dump(br_encoding_dict, file2)
 file2.close()
 
 

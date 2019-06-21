@@ -59,7 +59,7 @@ def Chi2(df, total_col, bad_col):
     badCombined = zip(df2['badExpected'], df2[bad_col])
     goodCombined = zip(df2['goodExpected'], df2['good'])
     badChi = [(i[0]-i[1])**2/(i[0] + 0.00001) for i in badCombined]
-    goodChi = [(i[0] - i[1]) ** 2 / i[0] for i in goodCombined]
+    goodChi = [(i[0] - i[1]) ** 2 / (i[0]+0.000001) for i in goodCombined]
     chi2 = sum(badChi) + sum(goodChi)
     return chi2
 
@@ -350,7 +350,7 @@ def CalcWOE(df, col, target):
     return {"WOE": WOE_dict, 'IV': IV}
 
 
-# 判断某变量的坏样本率是否单调
+# 判断变量分箱后的坏样本率是否单调
 def BadRateMonotone(df, sortByVar, target, special_attribute=[]):
     """
     :param df: 包含检验坏样本率的变量，和目标变量
