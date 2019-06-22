@@ -430,7 +430,7 @@ def CalcWOE(df, col, target):
     IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
     # PYDEVD_USE_FRAME_EVAL = NO
     # 使用filter()：
-    #
+    # https://oomake.com/question/1074868
     # >> > array
     # array([1., 2., 3., -Inf])
     # >> > sum(filter(lambda x: x != float('-inf'), array))
