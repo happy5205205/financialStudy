@@ -429,7 +429,13 @@ def CalcWOE(df, col, target):
         WOE_dict[k] = v['WOE']
     IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
     # PYDEVD_USE_FRAME_EVAL = NO
-    IV = np.ma.masked_invalid(IV).sum()
+    # 使用filter()：
+    #
+    # >> > array
+    # array([1., 2., 3., -Inf])
+    # >> > sum(filter(lambda x: x != float('-inf'), array))
+    # 6.0
+    # IV = np.ma.masked_invalid(IV).sum()
 
     return {'WOE': WOE_dict, 'IV': IV}
 
