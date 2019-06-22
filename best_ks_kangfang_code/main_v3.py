@@ -427,8 +427,10 @@ def CalcWOE(df, col, target):
     WOE_dict = regroup[[col, 'WOE']].set_index(col).to_dict(orient='index')
     for k, v in WOE_dict.items():
         WOE_dict[k] = v['WOE']
-    IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*(np.log(x.good_pcnt*1.0/x.bad_pcnt)), axis=1)
-    IV = sum(IV)
+    IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
+    # PYDEVD_USE_FRAME_EVAL = NO
+    IV = np.ma.masked_invalid(IV).sum()
+
     return {'WOE': WOE_dict, 'IV': IV}
 
 
@@ -478,7 +480,7 @@ def main():
     # 处理日期 earliest_cr_line标签的格式不统一，需要统一格式且转换成python格式
     trainData['earliest_cr_line_clean'] = trainData['earliest_cr_line'].map(ConverDataStr)
 
-    trainData['app_data_clean'] = trainData['issue_d'].map(ConverDataStr)
+    trainData['app_date_clean'] = trainData['issue_d'].map(ConverDataStr)
 
     #  对缺失值进行处理
     trainData['mths_since_last_delinq_clean'] = trainData['mths_since_last_delinq'].map(MakeupMissing)
@@ -488,6 +490,7 @@ def main():
     '''
         第二步：变量的衍生
     '''
+    # 缺少pub_rec_bankruptcies_clean_Bin变量等待排查
 
     # 考虑申请额度于收入的占比
     trainData['limit_income'] = trainData.apply(lambda x: x.loan_amnt / x.annual_inc, axis=1)
@@ -636,7 +639,7 @@ def main():
     # 4，连续变量。分箱后新的变量存放在var_bin_list中
     all_var = var_bin_list + less_value_feature
     for var in all_var:
-        woe_iv = CalcWOE(trainData, col, 'target')
+        woe_iv = CalcWOE(trainData, var, 'target')
         WOE_dict[var] = woe_iv['WOE']
         IV_dict[var] = woe_iv['IV']
 
@@ -659,7 +662,6 @@ def main():
     plt.title('feature IV')
     plt.bar(range(len(IV_values)), IV_values)
     plt.show()
-
 
 
 if __name__ == '__main__':

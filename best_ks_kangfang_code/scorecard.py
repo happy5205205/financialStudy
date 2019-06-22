@@ -292,7 +292,7 @@ IV_dict_sorted = sorted(IV_dict.items(), key=lambda x: x[1], reverse=True)
 IV_values = [i[1] for i in IV_dict_sorted]
 IV_name = [i[0] for i in IV_dict_sorted]
 plt.title('feature IV')
-plt.bar(range(len(IV_values)),IV_values)
+plt.bar(range(len(IV_values)), IV_values)
 
 '''
 第五步：单变量分析和多变量分析，均基于WOE编码后的值。
