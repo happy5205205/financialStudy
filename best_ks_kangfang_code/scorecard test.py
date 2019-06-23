@@ -1,3 +1,17 @@
+# _*_ coding:utf-8 _*_
+
+import numpy as np
+import re
+import time
+import datetime
+import pickle
+from dateutil.relativedelta import relativedelta
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score
+import scorecard_functions_V3 as sf
+import warnings
+
+warnings.filterwarnings('ignore')
 
 
 def ModifyDf(x, new_value):
@@ -7,10 +21,65 @@ def ModifyDf(x, new_value):
         return x
 
 
+def CareerYear(x):
+    # 对工作年限进行转换
+    x = str(x)
+    if x.find('n/a') > -1:
+        return -1
+    elif x.find("10+")>-1:   # 将"10＋years"转换成 11
+        return 11
+    elif x.find('< 1') > -1:  # 将"< 1 year"转换成 0
+        return 0
+    else:
+        c = re.sub(r'\D', "", x)
+        return c
+
+
+def DescExisting(x):
+    #将desc变量转换成有记录和无记录两种
+    if type(x).__name__ == 'float':
+        return 'no desc'
+    else:
+        return 'desc'
+
+
+def ConvertDateStr(x):
+    mth_dict = {'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10,
+                'Nov': 11, 'Dec': 12}
+    if str(x) == 'nan':
+        return datetime.datetime.fromtimestamp(time.mktime(time.strptime('9900-1','%Y-%m')))
+        # time.mktime 不能读取1970年之前的日期
+    else:
+        yr = int(x[4:6])
+        if yr <=17:
+            yr = 2000+yr
+        else:
+            yr = 1900 + yr
+        mth = mth_dict[x[:3]]
+        return datetime.datetime(yr, mth, 1)
+
+
+def MonthGap(earlyDate, lateDate):
+    if lateDate > earlyDate:
+        gap = relativedelta(lateDate,earlyDate)
+        yr = gap.years
+        mth = gap.months
+        return yr*12+mth
+    else:
+        return 0
+
+
+def MakeupMissing(x):
+    if np.isnan(x):
+        return -1
+    else:
+        return x
+
+
 '''
 将模型应用在测试数据集上
 '''
-
+folderOfData = './data/'
 testDataFile = open(folderOfData+'testData.pkl','r')
 testData = pickle.load((testDataFile))
 testDataFile.close()
@@ -98,9 +167,9 @@ for var in var_in_model:
 
     #上述处理后，需要加上连续型变量一起进行分箱
     if -1 not in set(testData[var1]):
-        testData[var1+'_Bin'] = testData[var1].map(lambda x: AssignBin(x, continous_merged_dict[var1]))
+        testData[var1+'_Bin'] = testData[var1].map(lambda x: sf.AssignBin(x, continous_merged_dict[var1]))
     else:
-        testData[var1 + '_Bin'] = testData[var1].map(lambda x: AssignBin(x, continous_merged_dict[var1],[-1]))
+        testData[var1 + '_Bin'] = testData[var1].map(lambda x: sf.AssignBin(x, continous_merged_dict[var1],[-1]))
 
     #WOE编码
     var3 = var.replace('_WOE','')
@@ -117,13 +186,13 @@ testData2 = testData[list(LR.params.index)]
 testData['prob'] = LR.predict(testData2)
 
 #计算KS和AUC
-auc = roc_auc_score(testData['y'],testData['prob'])
-ks = KS(testData, 'prob', 'y')
+auc = roc_auc_score(testData['y'], testData['prob'])
+ks = sf.KS(testData, 'prob', 'y')
 
 
 basePoint = 250
 PDO = 200
-testData['score'] = testData['prob'].map(lambda x:Prob2Score(x, basePoint, PDO))
+testData['score'] = testData['prob'].map(lambda x:sf.Prob2Score(x, basePoint, PDO))
 testData = testData.sort_values(by = 'score')
 
 

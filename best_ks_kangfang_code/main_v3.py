@@ -403,31 +403,33 @@ def BadRateMonotone(df, sortByVar, target, special_attribute=[]):
         return True
 
 
+# 计算IV值
 def CalcWOE(df, col, target):
     """
-    功能：计算woe和iv
     :param df: 包含需要计算WOE的变量和目标变量
     :param col: 需要计算WOE、IV的变量，必须是分箱后的变量，或者不需要分箱的类别型变量
     :param target: 目标变量，0、1表示好、坏
     :return: 返回WOE和IV
     """
-    total = df.groupby(col)[target].count()
+    total = df.groupby([col])[target].count()
     total = pd.DataFrame({'total': total})
-    bad = df.groupby(col)[target].sum()
+    bad = df.groupby([col])[target].sum()
     bad = pd.DataFrame({'bad': bad})
-    regroup = total.merge(bad, how='left', left_index=True, right_index=True)
+    regroup = total.merge(bad, left_index=True, right_index=True, how='left')
     regroup.reset_index(level=0, inplace=True)
     N = sum(regroup['total'])
-    B= sum(regroup['bad'])
+    B = sum(regroup['bad'])
     regroup['good'] = regroup['total'] - regroup['bad']
     G = N - B
     regroup['bad_pcnt'] = regroup['bad'].map(lambda x: x*1.0/B)
-    regroup['good_pcnt'] = regroup['good'].map(lambda x: x*1.0/G)
-    regroup['WOE'] = regroup.apply(lambda x: np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
-    WOE_dict = regroup[[col, 'WOE']].set_index(col).to_dict(orient='index')
+    regroup['good_pcnt'] = regroup['good'].map(lambda x: x * 1.0 / G)
+    regroup['WOE'] = regroup.apply(lambda x: np.log(x.good_pcnt*1.0/x.bad_pcnt),axis = 1)
+    WOE_dict = regroup[[col,'WOE']].set_index(col).to_dict(orient='index')
     for k, v in WOE_dict.items():
         WOE_dict[k] = v['WOE']
-    IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
+    IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*np.log(x.good_pcnt*1.0/x.bad_pcnt),axis = 1)
+    IV = sum(IV)
+    return {"WOE": WOE_dict, 'IV': IV}
     # PYDEVD_USE_FRAME_EVAL = NO
     # 使用filter()：
     # https://oomake.com/question/1074868
@@ -436,8 +438,6 @@ def CalcWOE(df, col, target):
     # >> > sum(filter(lambda x: x != float('-inf'), array))
     # 6.0
     # IV = np.ma.masked_invalid(IV).sum()
-
-    return {'WOE': WOE_dict, 'IV': IV}
 
 
 def main():
@@ -501,7 +501,7 @@ def main():
     # 考虑申请额度于收入的占比
     trainData['limit_income'] = trainData.apply(lambda x: x.loan_amnt / x.annual_inc, axis=1)
     # 考虑earliest_cr_line到申请日期的跨度，以月份记
-    trainData['earliest_cr_to_app'] = trainData.apply(lambda x: MonthGap(x.earliest_cr_line_clean, x.app_data_clean),
+    trainData['earliest_cr_to_app'] = trainData.apply(lambda x: MonthGap(x.earliest_cr_line_clean, x.app_date_clean),
                                                       axis=1)
 
     '''
@@ -668,6 +668,12 @@ def main():
     plt.title('feature IV')
     plt.bar(range(len(IV_values)), IV_values)
     plt.show()
+
+    '''
+    第五步：单变量分析和多变量分析，均基于WOE编码后的值。
+    （1）选择IV高于0.01的变量
+    （2）比较两两线性相关性。如果相关系数的绝对值高于阈值，剔除IV较低的一个
+    '''
 
 
 if __name__ == '__main__':
