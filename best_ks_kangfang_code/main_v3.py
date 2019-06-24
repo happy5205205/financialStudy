@@ -15,6 +15,7 @@ import numpy as np
 from dateutil.relativedelta import relativedelta
 import warnings
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 warnings.filterwarnings('ignore')
 
@@ -535,7 +536,7 @@ def main():
             more_value_feature.append(col)  # 取值超过5的变量，需要bad rate编码，再用卡方分箱法进行分箱
         else:
             less_value_feature.append(col)  # 如果每种类别同时包含好坏样本，无需分箱, 如果有类别只包含好坏样本的一种，需要合并
-    #  (i)取值<5时：如果每种类别同时包含好坏样本，无需分箱；如果有类别只包含好坏样本的一种，需要合并
+    # (i)取值<5时：如果每种类别同时包含好坏样本，无需分箱；如果有类别只包含好坏样本的一种，需要合并
     merge_bin_dict = {}  # 存放需要合并的变量，以及合并方法
     var_bin_list = []  # 由于某个取值没有好或者坏样本而需要合并的变量
 
@@ -665,17 +666,127 @@ def main():
     IV_values = [i[1] for i in IV_dict_sorted]
     IV_name = [i[0] for i in IV_dict_sorted]
 
-    plt.title('feature IV')
-    plt.bar(range(len(IV_values)), IV_values)
-    plt.show()
+    plt.bar(x=range(len(IV_name)), height=IV_values, label='feature IV', alpha=0.8, width=0.3)
+
+    # plt.title('feature IV')
+    # plt.bar(range(len(IV_values)), IV_values)
+    # plt.show()
 
     '''
     第五步：单变量分析和多变量分析，均基于WOE编码后的值。
     （1）选择IV高于0.01的变量
     （2）比较两两线性相关性。如果相关系数的绝对值高于阈值，剔除IV较低的一个
     '''
+    high_IV = {k: v for k, v in IV_dict.items() if v >= 0.02}
+    high_IV_sorted = sorted(high_IV.items(), key=lambda x: x[1], reverse=True)
 
+    short_list = high_IV.keys()
+    short_list_2 = []
+    for var in short_list:
+        newVar = var+'_WOE'
+        trainData[newVar] = trainData[var].map(WOE_dict[var])
+        short_list_2.append(newVar)
+
+    # 对于上一步的结果，计算相关系数矩阵，并画出热力图进行数据可视化
+    trainDataWOE = trainData[short_list_2]
+    # f, ax = plt.figure(figsize=(10, 8))
+    corr = trainDataWOE.corr()
+    # sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True), square=True, ax=ax)
+
+    # 两两间的线性相关性检验
+    # 1，将候选变量按照IV进行降序排列
+    # 2，计算第i和第i+1的变量的线性相关系数
+    # 3，对于系数超过阈值的两个变量，剔除IV较低的一个
+    deleted_index = []
+    cnt_vars = len(high_IV_sorted)
+    for i in range(cnt_vars):
+        if i in deleted_index:
+            continue
+        x1 = high_IV_sorted[i][0] + '_WOE'
+        for j in range(cnt_vars):
+            if i==j or j in deleted_index:
+                continue
+            y1 = high_IV_sorted[j][0]+'_WOE'
+            roh = np.corrcoef(trainData[x1], trainData[y1])[0, 1]
+            if abs(roh) > 0.7:
+                x1_IV = high_IV_sorted[i][1]
+                y1_IV = high_IV_sorted[j][1]
+                if x1_IV > y1_IV:
+                    deleted_index.append(j)
+                else:
+                    deleted_index.append(i)
+
+    '''
+    多变量分析：VIF
+    '''
+    multi_analysis_vars_1 = [high_IV_sorted[i][0] + '_WOE' for i in range(cnt_vars) if i not in deleted_index]
+    X = np.matrix(trainData[multi_analysis_vars_1])
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+    VIF_list = [variance_inflation_factor(X, i) for i in range(X.shape[1])]
+    max_VIF = max(VIF_list)
+    print ('最大的VIF是{}'.format(max_VIF))
+    multi_analysis = multi_analysis_vars_1
+
+    '''
+    第六步：逻辑回归模型。
+    要求：
+    1，变量显著
+    2，符号为负
+    '''
+    # (1)将多变量分析的后变量带入LR模型中
+    y = trainData['target']
+    X = trainData[multi_analysis]
+    X['intercept'] = [1] * X.shape[0]
+    from sklearn.linear_model import LogisticRegressionCV
+    import statsmodels.api as sm
+    LR = sm.Logit(y, X).fit()
+    summary = LR.summary()
+    pvals = LR.pvalues
+    pvals = pvals.to_dict()
+
+    # 有些变量不显著，需要逐步剔除
+    varLargeP = {k: v for k, v in pvals.items() if v>=0.1}
+    varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
+    while (len(varLargeP) > 0 and len(multi_analysis) >0):
+        # 每次迭代中，剔除最不显著的变量，直到
+        # (1) 剩余所有变量均显著
+        # (2) 没有特征可选
+        varMaxP = varLargeP[0][0]
+        print(varMaxP)
+        if varMaxP == 'intercept':
+            print('the intercept is not significant!')
+            break
+        y = trainData['target']
+        X = trainData[multi_analysis]
+        X['intercept'] = [1]*X.shape[0]
+
+        LR = sm.Logit(y, X).fit()
+        pvals = LR.pvalues
+        pvals = pvals.to_dict()
+
+        # 有些变量不显著，需要逐步剔除
+        varLargeP = {k: v for k, v in pvals.items() if v >= 0.1}
+        varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
+    summary = LR.summary()
+
+    trainData['prob'] = LR.predict(X)
+    from sklearn.metrics import roc_auc_score
+    acu = roc_auc_score(trainData['target'], trainData['prob'])
+
+    # 将模型保存
+    savaModel = open(outPath+'LR_Model_Normal.pkl', 'wb')
+    pickle.dump(LR, savaModel)
+    savaModel.close()
+
+    ##############################################################################################################
+    # 尝试用L1约束
+    # use cross validation to select the best regularization parameter
+    multi_analysis = multi_analysis_vars_1
+    X = trainData[multi_analysis]
+    X = np.matrix(X)
+    y = trainData['target']
+    y = np.array(y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=0)
 
 if __name__ == '__main__':
     main()
-
