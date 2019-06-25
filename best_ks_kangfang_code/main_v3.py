@@ -777,7 +777,7 @@ def main():
 
     # 有些变量不显著，需要逐步剔除
     varLargeP = {k: v for k, v in pvals.items() if v>=0.1}
-    varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
+    varLargeP = sorted(varLargeP.items(), key=lambda d: d[1], reverse=True)
     while (len(varLargeP) > 0 and len(multi_analysis) >0):
         # 每次迭代中，剔除最不显著的变量，直到
         # (1) 剩余所有变量均显著
@@ -797,7 +797,7 @@ def main():
 
         # 有些变量不显著，需要逐步剔除
         varLargeP = {k: v for k, v in pvals.items() if v >= 0.1}
-        varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
+        varLargeP = sorted(varLargeP.items(), key=lambda d: d[1], reverse=True)
     print('---' * 30)
     summary = LR.summary()
     print(summary)
@@ -825,7 +825,7 @@ def main():
     model_parameter = {}
     for C_penalty in np.arange(0.005, 0.2, 0.05):
         for bad_weight in  range(2, 101, 2):
-            print{'C_penalty参数为{}和bad_weight参数为{}'.format(C_penalty, bad_weight)}
+            # print({'C_penalty参数为{}和bad_weight参数为{}'.format(C_penalty, bad_weight)})
             LR_model_2 = LogisticRegressionCV(Cs=[C_penalty], penalty='l1', solver='liblinear', class_weight={1: bad_weight, 0: 1})
             LR_model_2_fit = LR_model_2.fit(X_train, y_train)
             y_pred = LR_model_2_fit.predict_proba(X_test)[:, 1]
@@ -845,7 +845,7 @@ def main():
     RFC_Model = RFC.fit(X, y)
     features_rfc = trainData[var_WOE_list].columns
     featureImportance = {features_rfc[i]: RFC_Model.feature_importances_[i] for i in range(len(features_rfc))}
-    featureImportanceSorted = sorted(featureImportance.iteritems(), key=lambda x: x[1], reverse=True)
+    featureImportanceSorted = sorted(featureImportance.items(), key=lambda x: x[1], reverse=True)
     # we selecte the top 10 features
     features_selection = [k[0] for k in featureImportanceSorted[:8]]
 
