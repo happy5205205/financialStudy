@@ -372,7 +372,7 @@ pvals = pvals.to_dict()
 
 # 有些变量不显著，需要逐步剔除
 varLargeP = {k: v for k, v in pvals.items() if v >= 0.1}
-varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
+varLargeP = sorted(varLargeP.items(), key=lambda d: d[1], reverse=True)
 
 while (len(varLargeP) > 0 and len(multi_analysis) > 0):
 
