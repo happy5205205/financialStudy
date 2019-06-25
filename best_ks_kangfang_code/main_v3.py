@@ -81,9 +81,6 @@ def MonthGap(earlyDate, lateDate):
         return 0
 
 
-
-
-
 def main():
     data_path = './data'
     outPath = './result/'
