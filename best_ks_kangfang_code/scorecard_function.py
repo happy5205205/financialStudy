@@ -445,7 +445,6 @@ def KS(df, score, target):
     return max(KS)
 
 
-
 def MergeByCondition(x,condition_list):
     #condition_list是条件列表。满足第几个condition，就输出几
     s = 0
