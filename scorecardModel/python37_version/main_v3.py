@@ -15,12 +15,11 @@ import numpy as np
 from dateutil.relativedelta import relativedelta
 import warnings
 import matplotlib.pyplot as plt
-import seaborn as sns
 from statsmodels.stats.outliers_influence import variance_inflation_factor  # 计算VIF
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
-from best_ks_kangfang_code import utils_v3
+from scorecardModel.python37_version import utils_v3
 
 warnings.filterwarnings('ignore')
 
@@ -231,12 +230,12 @@ def main():
             # 分箱后的最多的箱数
             max_interval = 5
             cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[],
-                              minBinPcnt=0)
+                                       minBinPcnt=0)
             print('{}变量的切割点是{}'.format(col, cutOff))
             trainData[col+'_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
             # 检验分箱后的单调性是否满足
             print('正在检验变量{}的单调性'.format(col))
-            monotone = utils_v3.BadRateMonotone(trainData, col+'_Bin', 'target')
+            monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
             while (not monotone):
                 # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
                 max_interval -= 1
@@ -259,7 +258,7 @@ def main():
                 max_interval -= 1
                 # 如果有－1，－1的bad rate不参与单调性检验
                 cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval, special_attribute=[-1],
-                                     minBinPcnt=0)
+                                           minBinPcnt=0)
                 trainData[col + '_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
                 if max_interval == 3:
                     # 当分箱数为3-1=2时，必然单调
