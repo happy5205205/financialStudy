@@ -441,6 +441,34 @@ def CalcWOE(df, col, target):
     # IV = np.ma.masked_invalid(IV).sum()
 
 
+def KS_AR(df, score, target):
+    '''
+    :param df: the dataset containing probability and bad indicator
+    :param score:
+    :param target:
+    :return:
+    '''
+    total = df.groupby([score])[target].count()
+    bad = df.groupby([score])[target].sum()
+    all = pd.DataFrame({'total': total, 'bad': bad})
+    all['good'] = all['total'] - all['bad']
+    # all[score] = all.index
+    all = all.sort_values(by=score, ascending=False)
+    all.index = range(len(all))
+    all.reset_index(level=0, inplace=True)
+    all['badCumRate'] = all['bad'].cumsum() / all['bad'].sum()
+    all['goodCumRate'] = all['good'].cumsum() / all['good'].sum()
+    all['totalPcnt'] = all['total'] / all['total'].sum()
+    arList = [0.5 * all.loc[0, 'badCumRate'] * all.loc[0, 'totalPcnt']]
+    for j in range(1, len(all)):
+        ar0 = 0.5 * sum(all.loc[j - 1:j, 'badCumRate']) * all.loc[j, 'totalPcnt']
+        arList.append(ar0)
+    arIndex = (2 * sum(arList) - 1) / (all['good'].sum() * 1.0 / all['total'].sum())
+    KS = all.apply(lambda x: x.badCumRate - x.goodCumRate, axis=1)
+    # return {'AR': arIndex, 'KS': max(KS), 'cut_value': all.loc[KS.isin([max(KS)])][score].min()}
+    return {'AR': arIndex, 'KS': max(KS)}
+
+
 def main():
     data_path = './data'
     outPath = './result/'
@@ -740,7 +768,10 @@ def main():
     from sklearn.linear_model import LogisticRegressionCV
     import statsmodels.api as sm
     LR = sm.Logit(y, X).fit()
+    print('---'*30)
     summary = LR.summary()
+    print(summary)
+    print
     pvals = LR.pvalues
     pvals = pvals.to_dict()
 
@@ -767,11 +798,14 @@ def main():
         # 有些变量不显著，需要逐步剔除
         varLargeP = {k: v for k, v in pvals.items() if v >= 0.1}
         varLargeP = sorted(varLargeP.iteritems(), key=lambda d: d[1], reverse=True)
+    print('---' * 30)
     summary = LR.summary()
+    print(summary)
 
     trainData['prob'] = LR.predict(X)
     from sklearn.metrics import roc_auc_score
-    acu = roc_auc_score(trainData['target'], trainData['prob'])
+    auc = roc_auc_score(trainData['target'], trainData['prob'])
+    print('auc为{}'.format(auc))
 
     # 将模型保存
     savaModel = open(outPath+'LR_Model_Normal.pkl', 'wb')
@@ -787,6 +821,41 @@ def main():
     y = trainData['target']
     y = np.array(y)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=0)
+
+    model_parameter = {}
+    for C_penalty in np.arange(0.005, 0.2, 0.05):
+        for bad_weight in  range(2, 101, 2):
+            print{'C_penalty参数为{}和bad_weight参数为{}'.format(C_penalty, bad_weight)}
+            LR_model_2 = LogisticRegressionCV(Cs=[C_penalty], penalty='l1', solver='liblinear', class_weight={1: bad_weight, 0: 1})
+            LR_model_2_fit = LR_model_2.fit(X_train, y_train)
+            y_pred = LR_model_2_fit.predict_proba(X_test)[:, 1]
+            scorecard_result = pd.DataFrame({'prob': y_pred, 'target': y_test})
+            performance = KS_AR(scorecard_result, score='prob', target='target')
+            KS = performance['KS']
+            model_parameter[(C_penalty, bad_weight)] = KS
+
+    # 用随机森林法估计变量重要性
+    var_WOE_list = multi_analysis_vars_1
+    X = trainData[var_WOE_list]
+    X = np.matrix(X)
+    y = trainData['target']
+    y = np.array(y)
+    from sklearn.ensemble import RandomForestClassifier
+    RFC = RandomForestClassifier()
+    RFC_Model = RFC.fit(X, y)
+    features_rfc = trainData[var_WOE_list].columns
+    featureImportance = {features_rfc[i]: RFC_Model.feature_importances_[i] for i in range(len(features_rfc))}
+    featureImportanceSorted = sorted(featureImportance.iteritems(), key=lambda x: x[1], reverse=True)
+    # we selecte the top 10 features
+    features_selection = [k[0] for k in featureImportanceSorted[:8]]
+
+    y = trainData['target']
+    X = trainData[features_selection]
+    X['intercept'] = [1] * X.shape[0]
+    LR = sm.Logit(y, X).fit()
+    summary = LR.summary()
+    print(summary)
+
 
 if __name__ == '__main__':
     main()

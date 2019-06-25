@@ -266,7 +266,6 @@ def UnsupervisedSplitBin(df,var,numOfSplit = 5, method = 'equal freq'):
         return splitPoint
 
 
-
 def AssignGroup(x, bin):
     """
     :param x: 某个变量的某个取值
@@ -433,3 +432,31 @@ def KS(df, score, target):
     all['goodCumRate'] = all['good'].cumsum() / all['good'].sum()
     KS = all.apply(lambda x: x.badCumRate - x.goodCumRate, axis=1)
     return max(KS)
+	
+	
+def KS_AR(df, score, target):
+    '''
+    :param df: the dataset containing probability and bad indicator
+    :param score:
+    :param target:
+    :return:
+    '''
+    total = df.groupby([score])[target].count()
+    bad = df.groupby([score])[target].sum()
+    all = pd.DataFrame({'total': total, 'bad': bad})
+    all['good'] = all['total'] - all['bad']
+    # all[score] = all.index
+    all = all.sort_values(by=score, ascending=False)
+    all.index = range(len(all))
+    all.reset_index(level=0, inplace=True)
+    all['badCumRate'] = all['bad'].cumsum() / all['bad'].sum()
+    all['goodCumRate'] = all['good'].cumsum() / all['good'].sum()
+    all['totalPcnt'] = all['total'] / all['total'].sum()
+    arList = [0.5 * all.loc[0, 'badCumRate'] * all.loc[0, 'totalPcnt']]
+    for j in range(1, len(all)):
+        ar0 = 0.5 * sum(all.loc[j - 1:j, 'badCumRate']) * all.loc[j, 'totalPcnt']
+        arList.append(ar0)
+    arIndex = (2 * sum(arList) - 1) / (all['good'].sum() * 1.0 / all['total'].sum())
+    KS = all.apply(lambda x: x.badCumRate - x.goodCumRate, axis=1)
+    # return {'AR': arIndex, 'KS': max(KS), 'cut_value': all.loc[KS.isin([max(KS)])][score].min()}
+    return {'AR': arIndex, 'KS': max(KS)}

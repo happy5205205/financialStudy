@@ -439,7 +439,7 @@ X = np.matrix(X)
 y = trainData['y']
 y = np.array(y)
 
-'''
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=0)
 X_train.shape, y_train.shape
 #
@@ -451,7 +451,7 @@ for C_penalty in np.arange(0.005, 0.2,0.005):
         LR_model_2_fit = LR_model_2.fit(X_train,y_train)
         y_pred = LR_model_2_fit.predict_proba(X_test)[:,1]
         scorecard_result = pd.DataFrame({'prob':y_pred, 'target':y_test})
-        performance = KS_AR(scorecard_result, 'prob', 'target')
+        performance = sf.KS_AR(scorecard_result, 'prob', 'target')
         KS = performance['KS']
         model_parameter[(C_penalty, bad_weight)] = KS
 
@@ -479,4 +479,3 @@ X['intercept'] = [1]*X.shape[0]
 
 LR = sm.Logit(y, X).fit()
 summary = LR.summary()
-'''
