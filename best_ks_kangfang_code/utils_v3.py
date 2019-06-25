@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jun 19 10:55:20 2019
+说明：常用评分卡模型使用函数，例如：卡方检验、单调性检验、KS计算 等等
+@author: peng_zhang
+"""
+
 import pandas as pd
 import numpy as np
 
