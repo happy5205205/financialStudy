@@ -14,13 +14,14 @@ from dateutil.relativedelta import relativedelta
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.preprocessing import OneHotEncoder
 import warnings
+import time
 
 warnings.filterwarnings('ignore')
 
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-#normalize the features using max-min to convert the values into [0,1] interval
+# normalize the features using max-min to convert the values into [0,1] interval
 def MaxMinNorm(df,col):
     ma, mi = max(df[col]), min(df[col])
     rangeVal = ma - mi
@@ -31,8 +32,8 @@ def MaxMinNorm(df,col):
 def CareerYear(x):
     if not x==x:
         return -1
-    #对工作年限进行转换
-    #if x.find('n/a') > -1:
+    # 对工作年限进行转换
+    # if x.find('n/a') > -1:
         #return -1
     elif x.find("10+")>-1:   #将"10＋years"转换成 11
         return 11
@@ -43,7 +44,7 @@ def CareerYear(x):
 
 
 def DescExisting(x):
-    #将desc变量转换成有记录和无记录两种
+    # 将desc变量转换成有记录和无记录两种
     if type(x).__name__ == 'float':
         return 'no desc'
     else:
@@ -55,7 +56,7 @@ def ConvertDateStr(x):
                 'Nov': 11, 'Dec': 12}
     if str(x) == 'nan':
         return datetime.datetime.fromtimestamp(time.mktime(time.strptime('9900-1','%Y-%m')))
-        #time.mktime 不能读取1970年之前的日期
+        # time.mktime 不能读取1970年之前的日期
     else:
         yr = int(x[4:6])
         if yr <=17:
@@ -87,7 +88,7 @@ def MakeupMissing(x):
 '''
 第一步：数据准备
 '''
-folderOfData = foldOfData = 'C:/Users/peng_zhang/Desktop/code/'
+folderOfData = foldOfData = 'D:/financialStudy/neuralNetwork/data/'
 allData = pd.read_csv(folderOfData + 'application.csv',header = 0, encoding = 'latin1')
 allData['term'] = allData['term'].apply(lambda x: int(x.replace(' months','')))
 # 处理标签：Fully Paid是正常用户；Charged Off是违约用户
@@ -136,22 +137,22 @@ cat_features = ['home_ownership', 'verification_status','desc_clean', 'purpose',
 
 v = DictVectorizer(sparse=False)
 X1 = v.fit_transform(trainData[cat_features].to_dict('records'))
-#将独热编码和数值型变量放在一起进行模型训练
+# 将独热编码和数值型变量放在一起进行模型训练
 X2 = matrix(trainData[num_features])
 X = hstack([X1,X2])
 Y = trainData['y']
 
 x_train,x_test, y_train, y_test = train_test_split(X,Y,test_size = 0.3,random_state = 0)
 
-#numnber of input layer nodes: dimension =
-#number of hidden layer & number of nodes in them: hidden_units
-#full link or not: droput. dropout = 1 means full link
-#activation function: activation_fn. By default it is relu
-#learning rate:
+# numnber of input layer nodes: dimension =
+# number of hidden layer & number of nodes in them: hidden_units
+# full link or not: droput. dropout = 1 means full link
+# activation function: activation_fn. By default it is relu
+# learning rate:
 
-#Example: select the best number of units in the 1-layer hidden layer
-#model_dir = path can make the next iteration starting from last termination
-#define the DNN with 1 hidden layer
+# Example: select the best number of units in the 1-layer hidden layer
+# model_dir = path can make the next iteration starting from last termination
+# define the DNN with 1 hidden layer
 no_hidden_units_selection = {}
 feature_columns = [tf.contrib.layers.real_valued_column("", dimension = x_train.shape[1])]
 for no_hidden_units in range(10,51,10):
@@ -169,7 +170,7 @@ for no_hidden_units in range(10,51,10):
 best_hidden_units = max(no_hidden_units_selection.items(), key=lambda x: x[1])[0]
 
 
-#Example: check the dropout effect
+# Example: check the dropout effect
 dropout_selection = {}
 feature_columns = [tf.contrib.layers.real_valued_column("", dimension = x_train.shape[1])]
 for dropout_prob in linspace(0,0.99,100):
@@ -178,9 +179,9 @@ for dropout_prob in linspace(0,0.99,100):
                                           hidden_units = [no_hidden_units],
                                           n_classes=2,
                                           dropout = dropout_prob
-                                          #optimizer=tf.train.ProximalAdagradOptimizer(learning_rate=0.1,l1_regularization_strength=0.001
-                                          #model_dir = path
-                                          #learning_rate=0.1
+                                          # optimizer=tf.train.ProximalAdagradOptimizer(learning_rate=0.1,l1_regularization_strength=0.001
+                                          # model_dir = path
+                                          # learning_rate=0.1
                                           )
     clf = SKCompat(clf0)
     clf.fit(x_train, y_train, batch_size=256,steps = 10000)
