@@ -382,7 +382,6 @@ def main():
     print('---'*30)
     summary = LR.summary()
     print(summary)
-    print
     pvals = LR.pvalues
     pvals = pvals.to_dict()
 
