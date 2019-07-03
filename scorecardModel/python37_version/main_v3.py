@@ -20,7 +20,9 @@ from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 from scorecardModel.python37_version import utils_v3
+import woe.feature_process
 
+import woe.feature_process as fp
 warnings.filterwarnings('ignore')
 
 

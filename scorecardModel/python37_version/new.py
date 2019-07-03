@@ -2,7 +2,8 @@
 import pandas as pd
 import numpy as np
 import os
-from scorecardModel.python37_version import utils_v3
+#from scorecardModel.python37_version import utils_v3
+import utils_v3
 from sklearn.model_selection import train_test_split
 import pickle
 import warnings
@@ -29,11 +30,8 @@ def main():
 
     # columnName = list(data.columns)
     columnNameRemove =['id_card_no', 'card_name', 'loan_date', 'target']
-    # for col in columnName:
-    #     if col in columnNameRemove:
-    #         columnName.remove(col)
-    columnName = [col for col in data.columns if col not in columnNameRemove]
-    for col in columnName:
+
+    for col in [cols for cols in data.columns if cols not in columnNameRemove]:
         valueCount = len(set(data[col]))
         if valueCount > 5:
             more_value_feature.append(col)
@@ -71,77 +69,77 @@ def main():
 
         # （ii）当取值>5时：用bad rate进行编码，放入连续型变量里
         br_encoding_dict = {}  # 记录按照bad rate进行编码的变量，及编码方式
-        for col in more_value_feature:
-            br_encoding = utils_v3.BadRateEncoding(df=trainData, col=col, target='target')
-            # print(br_encoding)
-            trainData[col + '_br_encoding'] = br_encoding['encoding']
-            br_encoding_dict[col] = br_encoding['bad_rate']
-            more_value_feature.append(col + '_br_encoding')
+    # for col in more_value_feature:
+    #     br_encoding = utils_v3.BadRateEncoding(df=trainData, col=col, target='target')
+    #     # print(br_encoding)
+    #     trainData[col + '_br_encoding'] = br_encoding['encoding']
+    #     br_encoding_dict[col] = br_encoding['bad_rate']
+    #     more_value_feature.append(col + '_br_encoding')
+    #
+    # # 保存需要用坏样本率编码的变量br_encoding_dict
+    # br_encoding_dict_file = open(outPath + 'br_encoding_dict.pkl', 'wb')
+    # pickle.dump(br_encoding_dict, br_encoding_dict_file)
+    # br_encoding_dict_file.close()
 
-        # 保存需要用坏样本率编码的变量br_encoding_dict
-        br_encoding_dict_file = open(outPath + 'br_encoding_dict.pkl', 'wb')
-        pickle.dump(br_encoding_dict, br_encoding_dict_file)
-        br_encoding_dict_file.close()
-
-        # （iii）对连续型变量进行分箱，包括（ii）中的变量
-        continous_merged_dict = {}
-        for col in more_value_feature:
-            print('{} is in processing'.format(col))
-            # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
-            if -1 not in set(trainData[col]):
-                # 分箱后的最多的箱数
-                max_interval = 5
+    # （iii）对连续型变量进行分箱，包括（ii）中的变量
+    continous_merged_dict = {}
+    for col in more_value_feature:
+        print('{} is in processing'.format(col))
+        # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
+        if -1 not in set(trainData[col]):
+            # 分箱后的最多的箱数
+            max_interval = 5
+            cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval,
+                                       special_attribute=[],
+                                       minBinPcnt=0)
+            print('{}变量的切割点是{}'.format(col, cutOff))
+            trainData[col + '_Bin'] = trainData[col].map(
+                lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
+            # 检验分箱后的单调性是否满足
+            print('正在检验变量{}的单调性'.format(col))
+            monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
+            while (not monotone):
+                # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
+                max_interval -= 1
                 cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval,
-                                           special_attribute=[],
-                                           minBinPcnt=0)
-                print('{}变量的切割点是{}'.format(col, cutOff))
+                                           special_attribute=[], minBinPcnt=0)
                 trainData[col + '_Bin'] = trainData[col].map(
                     lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
-                # 检验分箱后的单调性是否满足
-                print('正在检验变量{}的单调性'.format(col))
+                if max_interval == 2:
+                    # 当分箱数为2时，必然单调
+                    break
                 monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
-                while (not monotone):
-                    # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
-                    max_interval -= 1
-                    cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval,
-                                               special_attribute=[], minBinPcnt=0)
-                    trainData[col + '_Bin'] = trainData[col].map(
-                        lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
-                    if max_interval == 2:
-                        # 当分箱数为2时，必然单调
-                        break
-                    monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
-                newVar = col + '_Bin'
-                trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
-                var_bin_list.append(newVar)
-            else:
-                max_interval = 5
-                # 如果有－1，则除去－1后，其他取值参与分箱
-                cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval, special_attribute=[-1],
+            newVar = col + '_Bin'
+            trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
+            var_bin_list.append(newVar)
+        else:
+            max_interval = 5
+            # 如果有－1，则除去－1后，其他取值参与分箱
+            cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval, special_attribute=[-1],
+                                       minBinPcnt=0)
+            trainData[col + '_Bin'] = trainData[col].map(
+                lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
+            monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target', ['Bin -1'])
+            while (not monotone):
+                max_interval -= 1
+                # 如果有－1，－1的bad rate不参与单调性检验
+                cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval,
+                                           special_attribute=[-1],
                                            minBinPcnt=0)
                 trainData[col + '_Bin'] = trainData[col].map(
                     lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
+                if max_interval == 3:
+                    # 当分箱数为3-1=2时，必然单调
+                    break
                 monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target', ['Bin -1'])
-                while (not monotone):
-                    max_interval -= 1
-                    # 如果有－1，－1的bad rate不参与单调性检验
-                    cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval,
-                                               special_attribute=[-1],
-                                               minBinPcnt=0)
-                    trainData[col + '_Bin'] = trainData[col].map(
-                        lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
-                    if max_interval == 3:
-                        # 当分箱数为3-1=2时，必然单调
-                        break
-                    monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target', ['Bin -1'])
-                newVar = col + '_Bin'
-                trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
-                var_bin_list.append(newVar)
-            continous_merged_dict[col] = cutOff
-        # 需要保存每个变量的分割点
-        continous_merged_dict_file = open(outPath + 'continous_merged_dict.pkl', 'wb')
-        pickle.dump(continous_merged_dict, continous_merged_dict_file)
-        continous_merged_dict_file.close()
+            newVar = col + '_Bin'
+            trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
+            var_bin_list.append(newVar)
+        continous_merged_dict[col] = cutOff
+    # 需要保存每个变量的分割点
+    continous_merged_dict_file = open(outPath + 'continous_merged_dict.pkl', 'wb')
+    pickle.dump(continous_merged_dict, continous_merged_dict_file)
+    continous_merged_dict_file.close()
 
 
 if __name__ == '__main__':
