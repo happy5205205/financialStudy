@@ -13,6 +13,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+
 def main():
 
     data_path = './data'
@@ -70,10 +71,35 @@ def main():
         # less_value_feature中剔除不需要合并的变量
         less_value_feature = [i for i in less_value_feature if i + '_Bin' not in var_bin_list]
 
+    # 调用等频和等款函数
     for col in more_value_feature:
         print('{} is in processing'.format(col))
-        splitPoint = utils_v3.UnsupervisedSplitBin(df=trainData, var=col, numOfSplit = 5, method = 'equal freq1')
+        splitPoint = utils_v3.UnsupervisedSplitBin(df=trainData, var=col, numOfSplit = 5, method = 'equal freq')
         print('变量{}的切割点为{}'.format(col, splitPoint))
+
+    # 计算woe和iv
+    WOE_dict = {}
+    IV_dict = {}
+    # 分箱后的变量进行编码，包括：
+    # 1，初始取值个数小于5，且不需要合并的类别型变量。存放在less_value_features中
+    # 2，初始取值个数小于5，需要合并的类别型变量。合并后新的变量存放在var_bin_list中
+    # 3，初始取值个数超过5，需要合并的类别型变量。合并后新的变量存放在var_bin_list中
+    # 4，连续变量。分箱后新的变量存放在var_bin_list中
+    all_var = var_bin_list + less_value_feature
+    for var in all_var:
+        woe_iv = utils_v3.CalcWOE(trainData, var, 'target')
+        WOE_dict[var] = woe_iv['WOE']
+        IV_dict[var] = woe_iv['IV']
+
+    with open('woe.xlsx', 'w') as f:
+        [f.write('{0}\r{1}\n'.format('feature', 'woe'))]
+        [f.write('{0}\r{1}\n'.format(key, WOE_dict[key])) for key, values in WOE_dict.items()]
+        f.close()
+
+    with open('iv.xlsx', 'w') as f:
+        [f.write('{0}\r{1}\n'.format('feature', 'iv'))]
+        [f.write('{0}\r{1}\n'.format(key, values)) for key, values in IV_dict.items()]
+    f.close()
 
 
 if __name__ == '__main__':
