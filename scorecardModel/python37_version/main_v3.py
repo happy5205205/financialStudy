@@ -20,7 +20,9 @@ from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 from scorecardModel.python37_version import utils_v3
+import woe.feature_process
 
+import woe.feature_process as fp
 warnings.filterwarnings('ignore')
 
 
@@ -382,7 +384,6 @@ def main():
     print('---'*30)
     summary = LR.summary()
     print(summary)
-    print
     pvals = LR.pvalues
     pvals = pvals.to_dict()
 

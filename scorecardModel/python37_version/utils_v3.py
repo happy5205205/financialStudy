@@ -147,7 +147,7 @@ def Chi2(df, total_col, bad_col):
     badCombined = zip(df2['badExpected'], df2[bad_col])
     goodCombined = zip(df2['goodExpected'], df2['good'])
     badChi = [(i[0] - i[1]) ** 2 / (i[0] + 0.00001) for i in badCombined]
-    goodChi = [(i[0] - i[1]) ** 2 / i[0] for i in goodCombined]
+    goodChi = [(i[0] - i[1]) ** 2 / i[0] + 0.00001 for i in goodCombined]
     chi2 = sum(badChi) + sum(goodChi)
     return chi2
 
@@ -400,3 +400,27 @@ def KS_AR(df, score, target):
     KS = all.apply(lambda x: x.badCumRate - x.goodCumRate, axis=1)
     # return {'AR': arIndex, 'KS': max(KS), 'cut_value': all.loc[KS.isin([max(KS)])][score].min()}
     return {'AR': arIndex, 'KS': max(KS)}
+
+
+def UnsupervisedSplitBin(df, var, numOfSplit = 5, method = 'equal freq'):
+    """
+    等频分箱和等距分箱
+    :param df: 数据集
+    :param var: 需要分箱的变量。仅限数值型。
+    :param numOfSplit: 需要分箱个数，默认是5
+    :param method: 分箱方法，'equal freq'：，默认是等频，否则是等距
+    :return:
+    """
+    if method == 'equal freq':
+        N = df.shape[0]
+        n = N/numOfSplit
+        splitPointIndex = [i * n for i in range(1, numOfSplit)]
+        rawaValues = sorted(list(df[var]))
+        splitPoint = [rawaValues[int(i)] for i in splitPointIndex]
+        splitPoint = sorted(list(set(splitPoint)))
+        return splitPoint
+    else:
+        var_max, var_min = max(df[var]), min(df[var])
+        interval_len = (var_max-var_min)*1.0/numOfSplit
+        splitPoint = [var_min + i*interval_len for i in range(1, numOfSplit)]
+        return splitPoint
