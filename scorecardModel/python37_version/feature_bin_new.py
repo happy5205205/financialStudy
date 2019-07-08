@@ -22,11 +22,12 @@ def missing_cal(df):
     missing_df = missing_df.sort_values('missing_pct', ascending=False).reset_index(drop=True)
     return missing_df
 
+
 def missing_delete_var(df, threshold=None):
     """
      特征缺失处理
-        :param df:
-        :param target:
+        :param df: 数据集
+        :param threshold: 确实率删除的阈值
         :return: 删除后的数据集
     """
     df2 = df.copy()
@@ -37,8 +38,23 @@ def missing_delete_var(df, threshold=None):
     return df2
 
 
+def missing_delete_user(df, threshold):
 
-
+    """
+    样本缺失处理
+    :param df:
+    :param threshold:
+    :return:
+    """
+    df2 = df.copy()
+    missing_series = df.isnull().sum(axis=1)
+    missing_list = list(missing_series)
+    missing_index_list = []
+    for i, j in enumerate(missing_list):
+        if j > threshold:
+            missing_index_list.append(i)
+    df2 = df2[~(df2.index.isin(missing_index_list))]
+    return df2
 
 
 def data_processing(df, target):
@@ -48,7 +64,11 @@ def data_processing(df, target):
         :return: 清洗后的数据集
     """
     # 特征缺失处理
-    df = missing_delete_var(df, target)
+    df = missing_delete_var(df, threshold=0.8)
+    # 样本缺失处理
+    df = missing_delete_user(df, threshold=int(df.shape[1]*0.8))
+    col_list = [x for x in df.columns if x != target]
+
 
 
 
