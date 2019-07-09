@@ -18,7 +18,6 @@ def missing_cal(df):
     """
 		计算特征数据缺失占比
         :param df: 数据集
-        :param threshold:
         :return: 每个变量的缺失率
     """
     missing_series = df.isnull().sum() / df.shape[0]  # 此处需要修改
