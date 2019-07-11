@@ -9,6 +9,8 @@ from tqdm import tqdm
 
 pd.set_option('display.float_format', lambda x: '%.3f' %x)
 
+# ---------------------------第一部分：主要是数据清洗---------------------------
+
 
 def missing_cal(df):
     """
@@ -102,9 +104,9 @@ def data_processing(df, target):
 
     # 分类型特征填充
     cate_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in cate_col]
-    cate_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in cate_col]
+    cate_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in cate_col]
     num_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
-    num_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
+    num_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in num_col]
     for col in cate_miss_col1:
         df[col] = df[col].fillan('未知')
     for col in cate_miss_col2:
@@ -115,6 +117,316 @@ def data_processing(df, target):
         df[col] = df[col].fillna(df[col].median())
 
     return df, miss_df
+
+# ---------------------------第二部分：特征分箱---------------------------
+
+
+def binning_cate(df, col, target):
+    """
+    类别型特征进行分箱
+    :param df: 数据集
+    :param col: 输入特征
+    :param target: 好坏标记的字段名
+    :return: bin_df 特征的评估结果
+    """
+    total = df[target].count()
+    bad = df[target].sum()
+    good = total - bad
+    d1 = df.groupby([col], as_index=True)
+    d2 = pd.DataFrame()
+    d2['样本数'] = d1[target].count()
+    d2['黑样本数'] = d1[target].sum()
+    d2['白样本数'] = d2['样本数']-d2['黑样本数']
+    d2['逾期用户占比'] = d2['黑样本数'] / d2['样本数']
+    d2['badattr'] = d2['黑样本数'] / bad
+    d2['goodattr'] = d2['白样本数'] / good
+    d2['WOE'] = np.log(d2['badattr']/d2['goodattr'])
+    d2['bin_iv'] = (d2['badattr']-d2['goodattr'])*d2['WOE']
+    d2['IV'] = d2['bin_iv'].sum()
+
+    bin_df = d2.reset_index()
+    bin_df.drop(['badattr', 'goodattr', 'bin_iv'], axis=1, inplace=True)
+    bin_df.rename(columns={col: '分箱结果'},inplace=True)
+    bin_df['特征名'] = col
+    bin_df = pd.concat([bin_df['特征名'], bin_df.iloc[:, :-1]], axis=1)
+    return bin_df
+
+# ---------------------卡方分箱-----------------------------
+
+
+def split_data(df, col, split_num):
+    """
+        先用卡方分箱输出变量的分割点
+        :param df: 原始数据
+        :param col: 需要分箱的变量
+        :param split_num: 分割点的数量
+        :return:
+    """
+    df2 = df.copy()
+    count = df2.shape[0]  # 总样本数
+    n = math.floor(count / split_num) # 按照分割点数目等分后每组的样本数
+    split_index = [i*n for i in range(1, split_num)]
+    values = sorted(list(df2[col]))
+    split_value = [values[i] for i in split_index]
+    split_value = sorted(list(set(split_value)))
+
+    return split_value
+
+
+def assign_group(x, split_bin):
+    n = len(split_bin)
+    if x < min(split_bin):
+        return min(split_bin)  # 如果x小于分割点的最小值，则x映射为分割点的最小值
+    elif x > max(split_bin): # 如果x大于分割点的最大值，则x映射为分割点的最大值
+        return max(split_bin)
+    else:
+        for i in range(n-1):
+            if split_bin[i] < x < split_bin[i+1]:  # 如果x在两个分割点之间，则x映射为分割点较大的值
+                return split_bin[i+1]
+
+
+def bin_bad_rate(df, col, target, grantRateIndicator=0):
+    """
+        分组的违约概率
+        :param df: 原始数据
+        :param col: 原始变量/变量映射后的字段
+        :param target:目标变量的字段
+        :param grantRateIndicator:是否输出整体违约率
+        :return:
+    """
+    total = df.groupby(col)[target].count()
+    bad = df.groupby(col)[target].sum()
+    total_df = pd.DataFrame({'total': total})
+    bad_df = pd.DataFrame({'bad':bad})
+    regroup = pd.merge(total_df, bad_df, how='left', left_index=True, right_index=True)
+    regroup = regroup.reset_index()
+    regroup['bad_rate'] = regroup['bad'] / regroup['total']
+    dict_bad = dict(zip(regroup[col], regroup['bad_rate']))
+    if grantRateIndicator==0:
+        return (dict_bad, regroup)
+    else:
+        total_all = df.shape[0]
+        bad_all = sum(df[target])
+        all_bad_rate = total_all/bad_all
+        return (dict_bad, regroup, all_bad_rate)
+
+
+def cal_chi2(df, all_bad_rate):
+    """
+        计算卡方值
+        :param df:
+        :param all_bad_rate:
+        :return:
+    """
+    df2 = df.copy()
+    df2['expected']=df2['total']*all_bad_rate  # 计算每组的坏用户期望数量
+    combined = zip(df2['expected'], df2['bad'])  # 遍历每组的坏用户期望数量和实际数量
+    chi = [(i[0] - i[1]) ** 2 / i[0] for i in combined]   # 计算每组的卡方值
+    chi2 = sum(chi)  # 计算总的卡方值
+    return chi2
+
+
+def assign_bin(x, cutoffpoints):
+    """
+
+        :param x:
+        :param cutoffpoints:
+        :return:
+    """
+    bin_num = len(cutoffpoints) + 1
+    if x <= cutoffpoints[0]:   # 如果x小于最小的cutoff点，则映射为Bin 0
+        return 'Bin 0'
+    elif x > cutoffpoints[-1]:
+        return 'Bin {}'.format(bin_num - 1)  # 如果x大于最大的cutoff点，则映射为Bin(bin_num-1)
+    else:
+        for i in range(0, bin_num-1):
+            if cutoffpoints[i] < x <= cutoffpoints[i+1]:  # 如果x在两个cutoff点之间，则x映射为Bin(i+1)
+                return 'Bin {}'.format(i + 1)
+
+
+def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
+    """
+        卡方分箱
+        :param df:
+        :param col:
+        :param target:
+        :param max_bin:
+        :param min_binpct:
+        :return:
+    """
+    col_unique = sorted(list(set(df[col])))  # 变量的唯一值并排序
+    n = len(col_unique)  # 变量唯一值的个数
+    df2 = df.copy()
+    if n > 100:  # 如果变量的唯一值数目超过100，则将通过split_data和assign_group将x映射为split对应的value
+        split_col = split_data(df2, col, 100)
+        df2['col_map'] = df2[col].map(lambda x:assign_group(x, split_col))
+    else:
+        df2['col_map'] = df2[col] # 变量的唯一值数目没有超过100，则不用做映射
+    # 生成dict_bad,regroup,all_bad_rate的元组
+    (dict_bad, regroup, all_bad_rate) = bin_bad_rate(df2, 'col_map', target, grantRateIndicator=1)
+    col_map_unique = sorted(list(set(df2['col_map'])))  # 对变量映射后的value进行去重排序
+    group_interval = [[i] for i in col_map_unique]  # 对col_map_unique中每个值创建list并存储在group_interval中
+
+    while len(group_interval) > max_bin:  # 当group_interval的长度大于max_bin时，执行while循环
+        chi_list = []
+        for i in range(len(group_interval)-1):
+            temp_group = group_interval[i] + group_interval[i+1]   # temp_group 为生成的区间,list形式，例如[1,3]
+            chi_df = regroup[regroup['col_map'].isin(temp_group)]
+            chi_value = cal_chi2(chi_df, all_bad_rate)  # 计算每一对相邻区间的卡方值
+            chi_list.append(chi_value)
+        best_combined = chi_list.index(min(chi_list))  # 最小的卡方值的索引
+        # 将卡方值最小的一对区间进行合并
+        group_interval[best_combined] = group_interval[best_combined] + group_interval[best_combined +1]
+        # 删除合并前的右区间
+        group_interval.remove(group_interval[best_combined + 1])
+    # 对合并后每个区间进行排序
+    group_interval = [sorted(i) for i in group_interval]
+    cutoffpoints = [max(i) for i in group_interval[:-1]]
+
+    # 对数据分箱
+    df2['col_map_bin'] = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
+    # 计算每个区间的违约率
+    (dict_bad, regroup) = bin_bad_rate(df2, 'col_map_bin', target)
+    # 计算最小和最大的违约率
+    [min_bad_rate, max_bad_rate] = [min(dict_bad.values()), max(dict_bad.values())]
+    # 当最小的违约率等于0，说明区间内只有好样本，当最大的违约率等于1，说明区间内只有坏样本
+    while min_bad_rate == 0 or max_bad_rate == 1:
+        bad01_index = regroup[regroup['bad_rate'].isin(0, 1)].col_map_bin.tolist()  # 违约率为1或0的区间
+        bad01_bin = bad01_index[0]
+        if bad01_bin == max(regroup.col_map_bin):
+            # cutoffpoints = cutoffpoints.remove(cutoffpoints[-1])
+            cutoffpoints = cutoffpoints[:-1]  # 当bad01_bin是最大的区间时，删除最大的cutoff点
+        elif bad01_bin == min(regroup.col_map_bin):
+            cutoffpoints = cutoffpoints[1:]  # 当bad01_bin是最小的区间时，删除最小的cutoff点
+        else:
+            bad01_bin_index = list(regroup.col_map_bin).index(bad01_bin)  # 找出bad01_bin的索引
+            prev_bin = list(regroup.col_map_bin)[bad01_bin_index - 1]  # bad01_bin前一个区间
+            df3 = df2[df2.col_map_bin.isin([prev_bin, bad01_bin])]
+            (dict_bad, regroup1) = bin_bad_rate(df3, 'col_map_bin', target)
+            chi1 = cal_chi2(regroup1, all_bad_rate)  # 计算前一个区间和bad01_bin的卡方值
+            later_bin = list(regroup.col_map_bin)[bad01_bin_index + 1]  # bin01_bin的后一个区间
+            df4 = df2[df2.col_map_bin.isin([later_bin, bad01_bin])]
+            (dict_bad, regroup2) = bin_bad_rate(df4, 'col_map_bin', target)
+            chi2 = cal_chi2(regroup2, all_bad_rate)  # 计算后一个区间和bad01_bin的卡方值
+            if chi1 < chi2: # 当chi1<chi2时,删除前一个区间对应的cutoff点
+                cutoffpoints.remove(cutoffpoints[bad01_bin_index - 1])
+            else:
+                cutoffpoints.remove(cutoffpoints[bad01_bin_index])
+
+        df2['col_map_bin'] = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
+        (dict_bad, regroup) = bin_bad_rate(df2, 'col_map_bin', target)
+        # 重新将col_map映射至区间，并计算最小和最大的违约率，直达不再出现违约率为0或1的情况，循环停止
+        [min_bad_rate, max_bad_rate] = [min(dict_bad.values()), max(dict_bad.values())]
+
+    # 检查分箱后的最小占比
+    if min_binpct > 0:
+        group_value = df2['col_map'].apply(lambda x:assign_bin(x, cutoffpoints))
+        df2['col_map_bin'] = group_value  # 将col_map映射为对应的区间Bin
+        group_df = group_value.value_counts().to_frame()
+        group_df['bin_pct'] = group_df['col_map']/n  # 计算每个区间的占比
+        min_pct = group_df.bin_pct.min()
+        while min_pct < min_binpct and len(cutoffpoints) > 2:  # 当最小的区间占比小于min_pct且cutoff点的个数大于2，执行循环
+            # 下面的逻辑基本与“检验是否有箱体只有好/坏样本”的一致
+            min_pct_index = group_df[group_df.bin_pct == min_pct].index.tolist()
+            min_pct_bin = min_pct_index[0]
+            if min_pct_bin == max(group_df.index):
+                cutoffpoints = cutoffpoints[:-1]
+            elif min_pct_bin == min(group_df.index):
+                cutoffpoints = cutoffpoints[1:]
+            else:
+
+                minpct_bin_index = list(group_df.index).index(min_pct_bin)
+                prev_pct_bin = list(group_df.index)[minpct_bin_index - 1]
+                df5 = df2[df2['col_map_bin'].isin([min_pct_bin, prev_pct_bin])]
+                (dict_bad, regroup3) = bin_bad_rate(df5, 'col_map_bin', target)
+                chi3 = cal_chi2(regroup3, all_bad_rate)
+                later_pct_bin = list(group_df.index)[minpct_bin_index + 1]
+                df6 = df2[df2['col_map_bin'].isin([min_pct_bin, later_pct_bin])]
+                (dict_bad, regroup4) = bin_bad_rate(df6, 'col_map_bin', target)
+                chi4 = cal_chi2(regroup4, all_bad_rate)
+                if chi3 < chi4:
+                    cutoffpoints.remove(cutoffpoints[minpct_bin_index - 1])
+                else:
+                    cutoffpoints.remove(cutoffpoints[minpct_bin_index])
+    return cutoffpoints
+
+# ---------------------计算指标函数---------------------
+
+def cal_ks(df, col, target):
+    """
+    计算  ks，precision准确率，tpr召回率，fpr打扰率
+    :param df: 数据集
+    :param col:输入特征
+    :param target:好坏标记的字段名
+    :return: KS值, precision准确率, tpr召回率, fpr打扰率
+    """
+
+    bad = df.groupby(col)[target].sum()
+    good = df.groupby(col)[target].count() - bad
+
+
+def binning_sparse_col(df, target, col, max_bin=None, min_binpct=None, sqarse_value=None):
+    """
+        缺失率大于0.05的特征分箱
+        :param df: 数据集
+        :param target: 好坏标记的字段名
+        :param col: 输入的特征
+        :param max_bin: 最大分箱个数
+        :param min_binpct: 区间内样本所占总体的最小比
+        :param sparse_value: 单独分为一箱的values值
+        :return: 特征的评估结果
+    """
+    total = df[target].count()
+    bad = df[target].sum()
+    good = total - bad
+
+    # 对稀疏值0值或者缺失值单独分箱
+    temp1 = df[df[col] == sqarse_value]
+    temp2 = df[~df[col] == sqarse_value]
+
+    bucket_sparse = pd.cut(temp1[col], [float('-inf'), sqarse_value])
+    group1 = temp1.groupby(bucket_sparse)
+    bin_df1 = pd.DataFrame()
+    bin_df1['样本数'] = group1[target].count
+    bin_df1['黑样本数'] = group1[target].sum()
+    bin_df1['白样本数'] = bin_df1['样本数'] - bin_df1['黑样本数']
+    bin_df1['逾期用户占比'] = bin_df1['黑样本数']/bin_df1['样本数']
+    bin_df1['badattr'] = bin_df1['黑样本数'] /bad
+    bin_df1['goodattr'] = bin_df1['白样本数'] / good
+    bin_df1['WOE'] = np.log(bin_df1['badattr']/bin_df1['goodattr'])
+    bin_df1['IV'] = (bin_df1['badattr'] - bin_df1['goodattr'])*bin_df1['WOE']
+
+    bin_df1.reset_index()
+
+    # 对剩余做卡方分箱
+    cut = ChiMerge(temp2, col, target, max_bin=max_bin, min_binpct=min_binpct)
+    cut.insert(0, sqarse_value)
+    cut.append(float('inf'))
+
+    bucket = pd.cut(temp2[col], cut)
+    group2 = temp2.groupby(bucket)
+    bin_df2 = pd.DataFrame()
+    bin_df2['样本数'] = group2[target].count()
+    bin_df2['黑样本数'] = group2[target].sum()
+    bin_df2['白样本数'] = bin_df2['样本数'] - bin_df2['黑样本数']
+    bin_df2['逾期用户占比'] = bin_df2['黑样本数']/bin_df2['样本数']
+    bin_df2['badattr'] = bin_df2['黑样本数'] / bad
+    bin_df2['goodattr'] = bin_df2['白样本数'] / good
+    bin_df2['WOE'] = np.log(bin_df2['badattr'] / bin_df2['goodattr'])
+    bin_df2['IV'] = (bin_df2['badattr'] - bin_df2['goodattr'])*bin_df2['WOE']
+    bin_df2 = bin_df2.reset_index()
+
+    # 合并分箱结果
+    bin_df = pd.concat([bin_df1, bin_df2], axis=1)
+    bin_df['IV'] = bin_df['bin_iv'].sum().round(3)
+    bin_df.drop(['badattr', 'goodattr', 'bin_iv'], axis=1, inplace=True)
+    bin_df.rename(columns={col:'分箱结果'}, inpalce=True)
+    bin_df['特征名'] = col
+    bin_df = pd.concat([bin_df['特征名'], bin_df.iloc[:, :-1]], axis=1)
+
+    # ks, precision, tpr, fpr = cal_
+
+
 
 
 def get_feature_result(df_feature, target):
@@ -128,25 +440,53 @@ def get_feature_result(df_feature, target):
     else:
         print('数据清洗开始')
         df, miss_df = data_processing(df_feature, target)
-        return df, miss_df
+        print('数据清洗完成')
+
+        cate_col = list(df.select_dtypes(include=['O']).columns)
+        num_col = [x for x in list(df.select_dtypes(include=['int64', 'float64']).columns) if x != target]
+
+        # 类别型变量分箱
+        bin_cate_list = []
+        print('类别型特征开始分箱')
+        for col in tqdm(cate_col):
+            bin_cate = binning_cate(df_feature, col, target)
+            bin_cate['rank'] = list(range(1, bin_cate.shape[0] + 1, 1))
+            bin_cate_list.append(bin_cate)
+        print('类别型特征分箱结束')
+
+        # 数值型特征分箱
+        num_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
+        num_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in num_col]
+
+        print('开始特征分箱')
+        bin_num_list1 = []
+        err_col1 = []
+        for col in tqdm(num_col1):
+            try:
+                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=-999)
+
+            except (IndexError, ZeroDivisionError):
+
+                err_col1.append(col)
+            continue
+
+
+
+
 
 
 def main():
+    """
+        主函数
+    """
 
-    df = pd.read_csv('gm_model.csv')
+    df = pd.read_csv('test_file.csv')
 
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
 
-    # result_bin = ge
-    # col_list = [x for x in df_feature.columns if x != 'label']
-    # df = const_delete(df_feature, col_list, threshold=0.9)
-    # desc = df.describe().T
-    # miss_df = missing_cal(df_feature)
-    # cate_col = list(df_feature.select_dtypes(include=['0']).columns)
+    # df2, miss_df = get_feature_result(df_feature, 'label')
 
-    df2, miss_df = get_feature_result(df_feature, 'label')
-    print(df2)
-    print(miss_df)
+    get_feature_result(df_feature, 'label')
 
 
 if __name__ == '__main__':
