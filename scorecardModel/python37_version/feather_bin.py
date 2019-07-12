@@ -737,6 +737,7 @@ def main():
     # df_feature = df.drop(['name', 'idcard', 'mobile','input_timestamp'], axis=1)
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
     result_bin = get_feature_result(df_feature, 'label')
+    print(result_bin)
     result_bin.to_csv('estimate_result.csv', sep=',', encoding='gbk', index=False)
 
 

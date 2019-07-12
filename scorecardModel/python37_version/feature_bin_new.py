@@ -512,6 +512,7 @@ def binning_num(df, target, col, max_bin=None, min_binpct=None):
 
     return bin_df
 
+
 def binning_self(df, col, target, cut=None, right_border=True):
     """
         分箱报错的字段分箱
