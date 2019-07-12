@@ -352,6 +352,7 @@ def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
 
 # ---------------------计算指标函数---------------------
 
+
 def cal_ks(df, col, target):
     """
     计算  ks，precision准确率，tpr召回率，fpr打扰率
@@ -361,8 +362,40 @@ def cal_ks(df, col, target):
     :return: KS值, precision准确率, tpr召回率, fpr打扰率
     """
 
-    bad = df.groupby(col)[target].sum()
-    good = df.groupby(col)[target].count() - bad
+    bad = df[target].sum()
+    good = df[target].count() - bad
+    value_list = list(df[col])
+    label_list = list(df[target])
+    value_count = df[col].nunique()
+    items = sorted(zip(value_list, label_list), key=lambda x: x[0])
+    value_bin = []
+    ks_list = []
+    if value_count <= 200:
+        for i in sorted(set(value_list)):
+            value_bin.append(i)
+            label_bin = [x[1] for x in items if x[0] < i]
+            badrate = sum(label_bin) / bad
+            goodrate = (len(label_bin)-sum(label_bin)) / good
+            ks = abs(goodrate - badrate)
+            ks_list.append(ks)
+    else:
+        for i in range(1, 201):
+            step = (max(value_list) - min(value_list)) / 200
+            idx = min(value_list) + i*step
+            value_bin.append(idx)
+            label_bin = [x[1] for x in items if x[0] < idx]
+            badrate = sum(label_bin) / bad
+            goodrate = (len(label_bin) - sum(label_bin)) / good
+            ks = abs(goodrate - badrate)
+            ks_list.append(ks)
+    ks = round(max(ks_list), 3)
+
+    ks_value = [value_bin[i] for i, j in enumerate(ks_list) if j==max(ks_list)][0]
+    precision = df[(df[col] <= ks_value) & (df[target] == 1)].shape[0] / df[df[col] <= ks_value].shape[0]
+    tpr = df[(df[col] <= ks_value) & (df[target] == 1)].shape[0] / bad
+    fpr = df[(df[col] <= ks_value) & (df[target] == 0)].shape[0] / good
+
+    return ks, precision, tpr, fpr
 
 
 def binning_sparse_col(df, target, col, max_bin=None, min_binpct=None, sqarse_value=None):
@@ -424,9 +457,101 @@ def binning_sparse_col(df, target, col, max_bin=None, min_binpct=None, sqarse_va
     bin_df['特征名'] = col
     bin_df = pd.concat([bin_df['特征名'], bin_df.iloc[:, :-1]], axis=1)
 
-    # ks, precision, tpr, fpr = cal_
+    ks, precision, tpr, fpr = cal_ks(df, col, target)
+    bin_df['准确率'] = precision
+    bin_df['召回率'] = tpr
+    bin_df['打扰率'] = fpr
+    bin_df['KS'] = ks
+    return bin_df
 
 
+def binning_num(df, target, col, max_bin=None, min_binpct=None):
+    """
+    连续型数值特征
+    :param df: 数据集
+    :param target: 好坏标记的字段名
+    :param col: 输入的特征
+    :param max_bin: 最大分箱个数
+    :param min_binpct: 区间内样本所占总体的最小比
+    :return:
+    """
+    total = df[target].count()
+    bad = df[target].sum()
+    good = total - bad
+    inf = float('inf')
+    ninf = float('-inf')
+
+    cut = ChiMerge(df, col, target, max_bin, min_binpct=min_binpct)
+    cut.insert(0, ninf)
+    cut.append(inf)
+
+    bucket = pd.cut(df[col], cut)
+    d1 = df.groupby(bucket)
+    d2 = pd.DataFrame()
+    d2['样本数'] = d1[target].count()
+    d2['黑样本数'] = d1[target].sum()
+    d2['白样本数'] = d2['样本数'] - d2['黑样本数']
+    d2['逾期用户占比'] = d2['黑样本数'] / d2['样本数']
+    d2['badattr'] = d2['黑样本数'] / bad
+    d2['goodattr'] = d2['白样本数'] / good
+    d2['WOE'] = np.log(d2['badattr']/d2['goodattr'])
+    d2['bin_iv'] = (d2['badattr'] - d2['goodattr'])*d2['WOE']
+    d2['IV'] = d2['bin_iv'].sum()
+
+    bin_df = d2.reset_index()
+    bin_df.drop(['badattr', 'goodattr', 'bin_iv'], axis=1, inplace=True)
+    bin_df.rename(columns={col:'风箱结果'}, inplace=True)
+    bin_df['特征名'] = col
+    bin_df = pd.concat([bin_df['特征名'], bin_df.iloc[:, :-1]], axis=1)
+
+    ks, precision, tpr, fpr = cal_ks(df, col, target)
+    bin_df['准确率'] = precision
+    bin_df['召回率'] = tpr
+    bin_df['打扰率'] = fpr
+    bin_df['KS'] = ks
+
+    return bin_df
+
+
+def binning_self(df, col, target, cut=None, right_border=True):
+    """
+        分箱报错的字段分箱
+        :param df: 数据集
+        :param col: 输入的特征
+        :param target: 好坏标记的字段名
+        :param cut: 总定义划分区间的list
+        :param right_border: 设置左开右闭，左闭右开
+        :return: bin_df 特征的评估结果
+    """
+    total = df[target].count()
+    bad = df[target].sum()
+    good = total - bad
+    bucket = pd.cut(df[col], cut, right=right_border)
+    d1 = df.groupby(bucket)
+    d2 = pd.DataFrame()
+    d2['样本数'] = d1[target].count()
+    d2['黑样本数'] = d1[target].sum()
+    d2['白样本数'] = d2['样本数'] - d2['黑样本数']
+    d2['逾期用户占比'] = d2['黑样本数'] / d2['样本数']
+    d2['badattr'] = d2['黑样本数'] / bad
+    d2['goodattr'] = d2['白样本数'] / good
+    d2['WOE'] = np.log(d2['badattr'] / d2['goodattr'])
+    d2['bin_iv'] = (d2['badattr'] - d2['goodattr']) * d2['WOE']
+    d2['IV'] = d2['bin_iv'].sum()
+
+    bin_df = d2.reset_index()
+    bin_df.drop(['badattr', 'goodattr', 'bin_iv'], axis=1, inplace=True)
+    bin_df.rename(columns={col: '分箱结果'}, inplace=True)
+    bin_df['特征名'] = col
+    bin_df = pd.concat([bin_df['特征名'], bin_df.iloc[:, :-1]], axis=1)
+
+    ks, precision, tpr, fpr = cal_ks(df, col, target)
+    bin_df['准确率'] = precision
+    bin_df['召回率'] = tpr
+    bin_df['打扰率'] = fpr
+    bin_df['KS'] = ks
+
+    return bin_df
 
 
 def get_feature_result(df_feature, target):
@@ -463,16 +588,49 @@ def get_feature_result(df_feature, target):
         err_col1 = []
         for col in tqdm(num_col1):
             try:
-                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=-999)
-
+                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sqarse_value=-999)
+                bin_df1['rank'] = list(range(1, bin_df1.shape[0] + 1, 1))
+                bin_num_list1.append(bin_df1)
             except (IndexError, ZeroDivisionError):
-
                 err_col1.append(col)
             continue
 
+        bin_num_list2 = []
+        err_col2 = []
+        for col in tqdm(num_col2):
+            try:
+                bin_df2 = binning_num(df, 'label', col, min_binpct=0.05, max_bin=5)
+                bin_df2['rank'] = list(range(1, bin_df2.shape[0] + 1, 1))
+                bin_num_list2.append(bin_df2)
+            except(IndexError, ZeroDivisionError):
+                err_col2.append(col)
+            continue
+        # 卡方分箱报错的特征分箱
+        err_col = err_col1 + err_col2
+        bin_num_list3 = []
+        if len(err_col) > 0:
+            for col in err_col:
+                ninf = float('-inf')
+                inf = float('inf')
+                q_25 = df[col].quantile(0.25)
+                q_50 = df[col].quantile(0.5)
+                q_75 = df[col].quantile(0.75)
 
+                cut = list(sorted(set(ninf, q_25, q_50, q_75, inf)))
 
+                bin_df3 = binning_self(df, col, target, cut=cut, right_border=True)
+                bin_df3['rank'] = list(range(1, bin_df3.shape[0] + 1, 1))
+                bin_num_list3.append(bin_df3)
+        print('特征分箱结束')
 
+        bin_all_list = bin_num_list1 + bin_num_list2 + bin_num_list3 + bin_cate_list
+
+        feature_result = pd.concat(bin_all_list, axis=0)
+        feature_result = feature_result.sort_values(['IV', 'rank'], ascending=[False,True])
+        feature_result = feature_result.drop(['rank'], axis=1)
+        order_col = ['特征名', '分箱结果', '样本数', '黑样本数', '白样本数', '逾期用户占比', 'WOE', 'IV', '准确率', '召回率', '打扰率', 'KS']
+        feature_result = feature_result[order_col]
+        return feature_result
 
 
 def main():
@@ -480,7 +638,7 @@ def main():
         主函数
     """
 
-    df = pd.read_csv('test_file.csv')
+    df = pd.read_csv('gm_model.csv')
 
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
 
