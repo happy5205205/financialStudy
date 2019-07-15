@@ -121,18 +121,29 @@ def data_processing(df, target):
 
     # 缺失值计算和填充
     miss_df = missing_cal(df)
+    # 取出类别型特征
     cate_col = list(df.select_dtypes(include=['O']).columns)
+    # 取出数字型特征
     num_col = [x for x in list(df.select_dtypes(include=['int64', 'float64']).columns) if x != 'label']
 
-    # 分类型特征填充
+
+    # 类别型特征缺失值大于5%以上特征
     cate_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in cate_col]
+    # 类别型特征缺失值小于等于5%的特征
     cate_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in cate_col]
+
+    # 数字型特征缺失值大于5%特征
     num_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
+    # 数字型特征缺失值小于等于5%的特征
     num_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in num_col]
+
+    # 分类型特征填充
     for col in cate_miss_col1:
         df[col] = df[col].fillna('未知')
     for col in cate_miss_col2:
         df[col] = df[col].fillna(df[col].mode()[0])
+
+    # 数字型特征填充
     for col in num_miss_col1:
         df[col] = df[col].fillna(-999)
     for col in num_miss_col2:
@@ -306,7 +317,6 @@ def assign_bin(x, cutoffpoints):
             if cutoffpoints[i] < x <= cutoffpoints[i + 1]:  # 如果x在两个cutoff点之间，则x映射为Bin(i+1)
                 return 'Bin {}'.format(i + 1)
 
-
 """
 	2.4 卡方分箱（干货）
 """
@@ -453,7 +463,6 @@ def binning_cate(df, col, target):
 
 def binning_self(df, col, target, cut=None, right_border=True):
     """
-
     :param df: 数据集
     :param col: 输入的特征
     :param target: 好坏标记的字段名
@@ -552,7 +561,6 @@ def binning_num(df, target, col, max_bin=None, min_binpct=None):
 
 def binning_sparse_col(df, target, col, max_bin=None, min_binpct=None, sparse_value=None):
     """
-
     :param df: 数据集
     :param target: 好坏标记的字段名
     :param col: 输入的特征
@@ -646,26 +654,28 @@ def get_feature_result(df, target):
 
     else:
 
-        print('数据清洗开始')
+        print('----------------------------------数据清洗开始----------------------------------')
         df, miss_df = data_processing(df, target)
-        print('数据清洗完成')
+        print('----------------------------------数据清洗完成----------------------------------')
 
         cate_col = list(df.select_dtypes(include=['O']).columns)
         num_col = [x for x in list(df.select_dtypes(include=['int64', 'float64']).columns) if x != 'label']
 
-        # 类别性变量分箱
-
+        print('----------------------------------数据分箱开始----------------------------------')
+        # 类别型变量分箱
+        print('类别型变量分箱开始')
         bin_cate_list = []
-        for col in cate_col:
+        for col in tqdm(cate_col):
             bin_cate = binning_cate(df, col, target)
             bin_cate['rank'] = list(range(1, bin_cate.shape[0] + 1, 1))
             bin_cate_list.append(bin_cate)
+        print('类别型变量分箱结束')
 
         # 数值型特征分箱
         num_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
         num_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in num_col]
 
-        print('特征分箱开始')
+        print('数值型变量分箱开始')
         bin_num_list1 = []
         err_col1 = []
         for col in tqdm(num_col1):
@@ -687,8 +697,10 @@ def get_feature_result(df, target):
             except (IndexError, ZeroDivisionError):
                 err_col2.append(col)
             continue
+        print('数值型变量分箱结束')
 
         # 卡方分箱报错的特征分箱
+        print('卡方分箱报错的变量分箱开始')
         err_col = err_col1 + err_col2
         bin_num_list3 = []
         if len(err_col) > 0:
@@ -704,7 +716,8 @@ def get_feature_result(df, target):
                 bin_df3 = binning_self(df, col, target, cut=cut, right_border=True)
                 bin_df3['rank'] = list(range(1, bin_df3.shape[0] + 1, 1))
                 bin_num_list3.append(bin_df3)
-        print('特征分箱结束')
+        print('卡方分箱报错的变量分箱结束')
+        print('----------------------------------数据分箱结束----------------------------------')
 
         bin_all_list = bin_num_list1 + bin_num_list2 + bin_num_list3 + bin_cate_list
 
