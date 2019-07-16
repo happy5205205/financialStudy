@@ -680,7 +680,7 @@ def get_feature_result(df, target):
         err_col1 = []
         for col in tqdm(num_col1):
             try:
-                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=-999)
+                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=-99998)
                 bin_df1['rank'] = list(range(1, bin_df1.shape[0] + 1, 1))
                 bin_num_list1.append(bin_df1)
             except (IndexError, ZeroDivisionError):
@@ -745,12 +745,11 @@ def main():
     # else:
     #     df = pd.read_csv(file_path+'/'+feature_file, encoding='gbk')
 
-    df = pd.read_csv('gm_model.csv')
+    df = pd.read_csv('data_leida.csv')
 
-    # df_feature = df.drop(['name', 'idcard', 'mobile','input_timestamp'], axis=1)
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
     result_bin = get_feature_result(df_feature, 'label')
-    print(result_bin)
+    # print(result_bin)
     result_bin.to_csv('estimate_result.csv', sep=',', encoding='gbk', index=False)
 
 
