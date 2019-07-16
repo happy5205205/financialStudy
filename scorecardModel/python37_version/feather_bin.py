@@ -745,7 +745,7 @@ def main():
     # else:
     #     df = pd.read_csv(file_path+'/'+feature_file, encoding='gbk')
 
-    df = pd.read_csv('data_leida.csv')
+    df = pd.read_csv('gm_model.csv')
 
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
     result_bin = get_feature_result(df_feature, 'label')
