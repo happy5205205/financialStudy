@@ -20,6 +20,7 @@ from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 from scorecardModel.python37_version import utils_v3
+from tqdm import tqdm
 import woe.feature_process
 
 import woe.feature_process as fp
@@ -181,7 +182,7 @@ def main():
     merge_bin_dict = {}  # 存放需要合并的变量，以及合并方法
     var_bin_list = []  # 由于某个取值没有好或者坏样本而需要合并的变量
 
-    for col in less_value_feature:
+    for col in tqdm(less_value_feature):
         binBadRate = utils_v3.BinBadRate(df=trainData, col=col, target='target')[0]
         # print('{}的取值根据标签分组不同属性的坏样本比例为{}'.format(col, binBadRate))
         if min(binBadRate.values()) == 0:
@@ -225,7 +226,7 @@ def main():
 
     # （iii）对连续型变量进行分箱，包括（ii）中的变量
     continous_merged_dict = {}
-    for col in num_features:
+    for col in tqdm(num_features):
         print('{} is in processing'.format(col))
         # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
         if -1 not in set(trainData[col]):
