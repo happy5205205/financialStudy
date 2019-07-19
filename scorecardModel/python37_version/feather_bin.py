@@ -391,7 +391,7 @@ def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
         group_values = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
         df2['col_map_bin'] = group_values  # 将col_map映射为对应的区间Bin
         group_df = group_values.value_counts().to_frame()
-        group_df['bin_pct'] = group_df['col_map'] / n  # 计算每个区间的占比
+        group_df['bin_pct'] = group_df['col_map'] / sum(group_df['col_map'])  # 计算每个区间的占比
         min_pct = group_df.bin_pct.min()  # 得出最小的区间占比
         while min_pct < min_binpct and len(cutoffpoints) > 2:  # 当最小的区间占比小于min_pct且cutoff点的个数大于2，执行循环
             # 下面的逻辑基本与“检验是否有箱体只有好/坏样本”的一致
@@ -415,6 +415,11 @@ def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
                     cutoffpoints.remove(cutoffpoints[minpct_bin_index - 1])
                 else:
                     cutoffpoints.remove(cutoffpoints[minpct_bin_index])
+            group_values = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
+            df2['col_map_bin'] = group_values  # 将col_map映射为对应的区间Bin
+            group_df = group_values.value_counts().to_frame()
+            group_df['bin_pct'] = group_df['col_map'] / sum(group_df['col_map'])  # 计算每个区间的占比
+            min_pct = group_df.bin_pct.min()  # 得出最小的区间占比
     return cutoffpoints
 
 
@@ -559,7 +564,7 @@ def binning_num(df, target, col, max_bin=None, min_binpct=None):
 """
 
 
-def binning_sparse_col(df, target, col, max_bin=None, min_binpct=None, sparse_value=None):
+def binning_sparse_col(df, target, col, max_bin=None, min_binpct=0, sparse_value=None):
     """
     :param df: 数据集
     :param target: 好坏标记的字段名

@@ -177,7 +177,7 @@ def assign_group(x, split_bin):
     n = len(split_bin)
     if x < min(split_bin):
         return min(split_bin)  # 如果x小于分割点的最小值，则x映射为分割点的最小值
-    elif x > max(split_bin): # 如果x大于分割点的最大值，则x映射为分割点的最大值
+    elif x > max(split_bin):  # 如果x大于分割点的最大值，则x映射为分割点的最大值
         return max(split_bin)
     else:
         for i in range(n-1):
@@ -245,56 +245,47 @@ def assign_bin(x, cutoffpoints):
 
 
 def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
-    """
-        卡方分箱
-        :param df:
-        :param col:
-        :param target:
-        :param max_bin:
-        :param min_binpct:
-        :return:
-    """
     col_unique = sorted(list(set(df[col])))  # 变量的唯一值并排序
-    n = len(col_unique)  # 变量唯一值的个数
+    n = len(col_unique)  # 变量唯一值得个数
     df2 = df.copy()
     if n > 100:  # 如果变量的唯一值数目超过100，则将通过split_data和assign_group将x映射为split对应的value
-        split_col = split_data(df2, col, 100)
-        df2['col_map'] = df2[col].map(lambda x:assign_group(x, split_col))
+        split_col = split_data(df2, col, 100)  # 通过这个目的将变量的唯一值数目人为设定为100
+        df2['col_map'] = df2[col].map(lambda x: assign_group(x, split_col))
     else:
-        df2['col_map'] = df2[col] # 变量的唯一值数目没有超过100，则不用做映射
+        df2['col_map'] = df2[col]  # 变量的唯一值数目没有超过100，则不用做映射
     # 生成dict_bad,regroup,all_bad_rate的元组
     (dict_bad, regroup, all_bad_rate) = bin_bad_rate(df2, 'col_map', target, grantRateIndicator=1)
     col_map_unique = sorted(list(set(df2['col_map'])))  # 对变量映射后的value进行去重排序
     group_interval = [[i] for i in col_map_unique]  # 对col_map_unique中每个值创建list并存储在group_interval中
 
-    while len(group_interval) > max_bin:  # 当group_interval的长度大于max_bin时，执行while循环
+    while (len(group_interval) > max_bin):  # 当group_interval的长度大于max_bin时，执行while循环
         chi_list = []
-        for i in range(len(group_interval)-1):
-            temp_group = group_interval[i] + group_interval[i+1]   # temp_group 为生成的区间,list形式，例如[1,3]
+        for i in range(len(group_interval) - 1):
+            temp_group = group_interval[i] + group_interval[i + 1]  # temp_group 为生成的区间,list形式，例如[1,3]
             chi_df = regroup[regroup['col_map'].isin(temp_group)]
             chi_value = cal_chi2(chi_df, all_bad_rate)  # 计算每一对相邻区间的卡方值
             chi_list.append(chi_value)
         best_combined = chi_list.index(min(chi_list))  # 最小的卡方值的索引
         # 将卡方值最小的一对区间进行合并
-        group_interval[best_combined] = group_interval[best_combined] + group_interval[best_combined +1]
+        group_interval[best_combined] = group_interval[best_combined] + group_interval[best_combined + 1]
         # 删除合并前的右区间
         group_interval.remove(group_interval[best_combined + 1])
-    # 对合并后每个区间进行排序
+        # 对合并后每个区间进行排序
     group_interval = [sorted(i) for i in group_interval]
+    # cutoff点为每个区间的最大值
     cutoffpoints = [max(i) for i in group_interval[:-1]]
 
-    # 对数据分箱
-    df2['col_map_bin'] = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
+    # 检查是否有箱只有好样本或者只有坏样本
+    df2['col_map_bin'] = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))  # 将col_map映射为对应的区间Bin
     # 计算每个区间的违约率
     (dict_bad, regroup) = bin_bad_rate(df2, 'col_map_bin', target)
     # 计算最小和最大的违约率
     [min_bad_rate, max_bad_rate] = [min(dict_bad.values()), max(dict_bad.values())]
     # 当最小的违约率等于0，说明区间内只有好样本，当最大的违约率等于1，说明区间内只有坏样本
     while min_bad_rate == 0 or max_bad_rate == 1:
-        bad01_index = regroup[regroup['bad_rate'].isin(0, 1)].col_map_bin.tolist()  # 违约率为1或0的区间
+        bad01_index = regroup[regroup['bad_rate'].isin([0, 1])].col_map_bin.tolist()  # 违约率为1或0的区间
         bad01_bin = bad01_index[0]
         if bad01_bin == max(regroup.col_map_bin):
-            # cutoffpoints = cutoffpoints.remove(cutoffpoints[-1])
             cutoffpoints = cutoffpoints[:-1]  # 当bad01_bin是最大的区间时，删除最大的cutoff点
         elif bad01_bin == min(regroup.col_map_bin):
             cutoffpoints = cutoffpoints[1:]  # 当bad01_bin是最小的区间时，删除最小的cutoff点
@@ -308,11 +299,10 @@ def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
             df4 = df2[df2.col_map_bin.isin([later_bin, bad01_bin])]
             (dict_bad, regroup2) = bin_bad_rate(df4, 'col_map_bin', target)
             chi2 = cal_chi2(regroup2, all_bad_rate)  # 计算后一个区间和bad01_bin的卡方值
-            if chi1 < chi2: # 当chi1<chi2时,删除前一个区间对应的cutoff点
+            if chi1 < chi2:  # 当chi1<chi2时,删除前一个区间对应的cutoff点
                 cutoffpoints.remove(cutoffpoints[bad01_bin_index - 1])
-            else:
+            else:  # 当chi1>=chi2时,删除bin01对应的cutoff点
                 cutoffpoints.remove(cutoffpoints[bad01_bin_index])
-
         df2['col_map_bin'] = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
         (dict_bad, regroup) = bin_bad_rate(df2, 'col_map_bin', target)
         # 重新将col_map映射至区间，并计算最小和最大的违约率，直达不再出现违约率为0或1的情况，循环停止
@@ -320,11 +310,11 @@ def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
 
     # 检查分箱后的最小占比
     if min_binpct > 0:
-        group_value = df2['col_map'].apply(lambda x:assign_bin(x, cutoffpoints))
-        df2['col_map_bin'] = group_value  # 将col_map映射为对应的区间Bin
-        group_df = group_value.value_counts().to_frame()
-        group_df['bin_pct'] = group_df['col_map']/n  # 计算每个区间的占比
-        min_pct = group_df.bin_pct.min()
+        group_values = df2['col_map'].apply(lambda x: assign_bin(x, cutoffpoints))
+        df2['col_map_bin'] = group_values  # 将col_map映射为对应的区间Bin
+        group_df = group_values.value_counts().to_frame()
+        group_df['bin_pct'] = group_df['col_map'] / n  # 计算每个区间的占比
+        min_pct = group_df.bin_pct.min()  # 得出最小的区间占比
         while min_pct < min_binpct and len(cutoffpoints) > 2:  # 当最小的区间占比小于min_pct且cutoff点的个数大于2，执行循环
             # 下面的逻辑基本与“检验是否有箱体只有好/坏样本”的一致
             min_pct_index = group_df[group_df.bin_pct == min_pct].index.tolist()
@@ -334,7 +324,6 @@ def ChiMerge(df, col, target, max_bin=5, min_binpct=0):
             elif min_pct_bin == min(group_df.index):
                 cutoffpoints = cutoffpoints[1:]
             else:
-
                 minpct_bin_index = list(group_df.index).index(min_pct_bin)
                 prev_pct_bin = list(group_df.index)[minpct_bin_index - 1]
                 df5 = df2[df2['col_map_bin'].isin([min_pct_bin, prev_pct_bin])]
@@ -500,7 +489,7 @@ def binning_num(df, target, col, max_bin=None, min_binpct=None):
 
     bin_df = d2.reset_index()
     bin_df.drop(['badattr', 'goodattr', 'bin_iv'], axis=1, inplace=True)
-    bin_df.rename(columns={col:'风箱结果'}, inplace=True)
+    bin_df.rename(columns={col: '风箱结果'}, inplace=True)
     bin_df['特征名'] = col
     bin_df = pd.concat([bin_df['特征名'], bin_df.iloc[:, :-1]], axis=1)
 
@@ -597,7 +586,7 @@ def get_feature_result(df_feature, target):
 
         bin_num_list2 = []
         err_col2 = []
-        for col in tqdm(num_col2):
+        for col in num_col2:
             try:
                 bin_df2 = binning_num(df, 'label', col, min_binpct=0.05, max_bin=5)
                 bin_df2['rank'] = list(range(1, bin_df2.shape[0] + 1, 1))

@@ -207,7 +207,7 @@ def main():
     pickle.dump(merge_bin_dict, merge_bin_dict_file)
     merge_bin_dict_file.close()
 
-    # less_value_feature中剔除不需要合并的变量
+    # less_value_feature中剔除需要合并的变量
     less_value_feature = [i for i in less_value_feature if i + '_Bin' not in var_bin_list]
 
     # （ii）当取值>5时：用bad rate进行编码，放入连续型变量里

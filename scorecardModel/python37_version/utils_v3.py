@@ -309,6 +309,14 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
                         cutOffPoints.remove(cutOffPoints[currentIndex - 1])
                     else:
                         cutOffPoints.remove(cutOffPoints[currentIndex])
+						
+				groupdvalues = df2['temp'].apply(lambda x: AssignBin(x, cutOffPoints))
+                df2['temp_Bin'] = groupdvalues
+                valuesCounts = groupdvalues.value_counts().to_frame()
+                N = sum(valuesCounts['temp'])
+                valuesCounts['pcnt'] = valuesCounts['temp'].apply(lambda x: x * 1.0 / N)
+                valuesCounts = valuesCounts.sort_index()
+                minPcnt = min(valuesCounts['pcnt'])
         cutOffPoints = special_attribute + cutOffPoints
         return cutOffPoints
 
