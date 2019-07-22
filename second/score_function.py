@@ -7,7 +7,11 @@ import re
 import datetime
 import time
 from dateutil.relativedelta import relativedelta
+import matplotlib.pyplot as plt
+import pickle
 from tqdm import tqdm
+import warnings
+warnings.filterwarnings('ignore')
 
 def CareerYear(x):
     # 对工作年限进行修改
@@ -82,7 +86,7 @@ def BinBadRate(df, col, target, grantRateIndicator=0):
         :return: 每箱的坏样本率，以及总体的坏样本率（当grantRateIndicator＝＝1时）
     """
     total = df.groupby(col)[target].count()
-    total = pd.DataFrame({'total':total})
+    total = pd.DataFrame({'total': total})
     bad = df.groupby(col)[target].sum()
     bad = pd.DataFrame({'bad': bad})
     regroup = pd.merge(total, bad, how='left', right_index=True, left_index=True)
@@ -249,8 +253,8 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
     """
     colLevels = sorted(list(set(df[col])))
     N_distinct = len(colLevels)
-    if N_distinct <= max_interval:
-        print("The number of original levels for {} is less than or equal to max intervals".format(col))
+    if N_distinct < max_interval:
+        print("The number of original levels for {} is less than or equal to max intervals\n".format(col))
         return colLevels[:-1]
     else:
         if len(special_attribute) >= 1 :
@@ -376,8 +380,67 @@ def ChiMerge(df, col, target, max_interval=5, special_attribute=[], minBinPcnt=0
                 valuesCounts['pcnt'] = valuesCounts['temp'].apply(lambda x: x * 1.0 / N)
                 valuesCounts = valuesCounts.sort_index()
                 minPcnt = min(valuesCounts['pcnt'])
-            cutOffPoints = special_attribute + cutOffPoints
-            return cutOffPoints
+        cutOffPoints = special_attribute + cutOffPoints
+        return cutOffPoints
+
+
+def BadRateMonotone(df, sortByVar, target, special_attribute=[]):
+    """
+    功能：判断变量分箱后的坏样本率是否单调
+    :param df: 包含检验坏样本率的变量，和目标变量
+    :param sortByVar: 需要检验坏样本率的变量
+    :param target: 目标变量，0、1表示好、坏
+    :param special_attribute: 不参与检验的特殊值
+    :return: 坏样本率单调与否
+    """
+    df2 = df.loc[~df[sortByVar].isin(special_attribute)]
+    if len(set(df2[sortByVar])) <= 2:
+        return True
+
+    regroup = BinBadRate(df2, sortByVar, target)[1]
+    combined = zip(regroup['total'], regroup['bad'])
+    badRate = [x[1]*1.0/x[0] for x in combined]
+    df3 = pd.DataFrame()
+
+    badRateNotMonotone = [badRate[i] < badRate[i+1] and badRate[i] < badRate[i-1] or
+                          badRate[i] > badRate[i+1] and badRate[i] > badRate[i-1]
+                          for i in range(1, len(badRate)-1)]
+    if True in badRateNotMonotone:
+        return False
+    else:
+        return True
+
+
+def CalcWOE(df, col, target):
+    """
+        计算IV值
+        :param df: 包含需要计算WOE的变量和目标变量
+        :param col: 需要计算WOE、IV的变量，必须是分箱后的变量，或者不需要分箱的类别型变量
+        :param target: 目标变量，0、1表示好、坏
+        :return: 返回WOE和IV
+    """
+    total = df.groupby(col)[target].count()
+    total = pd.DataFrame({'total': total})
+    bad = df.groupby(col)[target].sum()
+    bad = pd.DataFrame({'bad': bad})
+    regroup = pd.merge(total, bad, how='left', right_index=True, left_index=True)
+    regroup.reset_index(level=0, inplace=True)
+    N = sum(regroup['total'])
+    B = sum(regroup['bad'])
+    G = N - B
+    regroup['good'] = regroup.apply(lambda x: x.total-x.bad, axis=1)
+    # regroup['bad_pcnt'] = regroup.apply(lambda x: x.bad*1.0/B)
+    # regroup['good_pcnt'] = regroup.apply(lambda x: x.good*1.0/G)
+    regroup['bad_pcnt'] = regroup['bad'].map(lambda x: x * 1.0 / B)
+    regroup['good_pcnt'] = regroup['good'].map(lambda x: x * 1.0 / G)
+    regroup['WOE'] = regroup.apply(lambda x: np.log(x.good_pcnt/x.bad_pcnt), axis=1)
+    WOE_dict = regroup[[col, 'WOE']].set_index(col).to_dict(orient='index')
+    for k, v in WOE_dict.items():
+        WOE_dict[k] = v['WOE']
+    IV = regroup.apply(lambda x: (x.good_pcnt-x.bad_pcnt)*np.log(x.good_pcnt*1.0/x.bad_pcnt), axis=1)
+    IV = sum(IV)
+    return {"WOE": WOE_dict, 'IV': IV}
+
 
 def main():
     data_path = './data'
@@ -386,7 +449,14 @@ def main():
     if not os.path.exists(out_path):
         os.mkdir(out_path)
 
-    allData = pd.read_csv(os.path.join(data_path, 'application.csv'), encoding='latin1')
+    for decode in ('gbk', 'utf-8', 'gb18030'):
+        try:
+            allData = pd.read_csv(os.path.join(data_path, 'application.csv'), encoding=decode, error_bad_lines=False)
+            print('data-' + decode + '-success!!')
+            break
+        except:
+            pass
+    # allData = pd.read_csv(os.path.join(data_path, 'application.csv'), encoding='latin1')
     allData['term'] = allData['term'].apply(lambda x: int(x.replace('months', '')))
     # target 处理，loan_status标签中Fully Paid是正常客户  Charged Off是违约客户
     allData['target'] = allData['loan_status'].map(lambda x: int(x == 'Charged Off'))
@@ -461,7 +531,7 @@ def main():
     print('类别型变量分箱')
     print('类别型变量取值小于5的变量分箱开始')
     more_value_feature = [col for col in cat_features if len(set(allData[col])) > 5]  # 存放变量取值大于5
-    less_value_feature = [col for col in cat_features if len(set(allData[col])) < 5]  # 存放变量取值少于5
+    less_value_feature = [col for col in cat_features if len(set(allData[col])) <= 5]  # 存放变量取值少于5
 
     # (i)取值<5时：如果每种类别同时包含好坏样本，无需分箱；如果有类别只包含好坏样本的一种，需要合并
     merge_bin_dict = {}  # 存放需要合并的变量，以及合并方法
@@ -506,7 +576,64 @@ def main():
         if -1 not in set(allData[col]):
             # 分箱后的最多的箱数
             max_interval = 5
-            cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval,special_attribute=[], minBinPcnt=0.1)
+            cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
+            allData[col+'_Bin'] = allData[col].apply(lambda x: AssignBin(x, cutOff, special_attribute=[]))
+            monotone = BadRateMonotone(allData, col+'_Bin', 'target')
+            # print(monotone)
+            while (not monotone):
+                # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
+                max_interval -= 1
+                cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[],minBinPcnt=0)
+                allData[col + '_Bin'] = allData[col].apply(lambda x: AssignBin(x, cutOff, special_attribute=[]))
+                if max_interval == 2:
+                    # 当分箱数为2时，必然单调
+                    break
+                monotone = BadRateMonotone(allData, col + '_Bin', 'target')
+            newVar = col + '_Bin'
+            allData[newVar] = allData[col].map(lambda x:AssignBin(x, cutOff, special_attribute=[]))
+            var_bin_list.append(newVar)
+        else:
+            max_interval=5
+            # 如果有－1，则除去－1后，其他取值参与分箱
+            cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[-1], minBinPcnt=0)
+            allData[col+'_Bin'] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+            monotone = BadRateMonotone(allData, col + '_Bin', 'target')
+            while (not monotone):
+                max_interval -= 1
+                cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[-1], minBinPcnt=0)
+                allData[col + '_Bin'] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+                if max_interval == 3:
+                    break
+                monotone = BadRateMonotone(allData, col+'_Bin', 'target', ['Bin -1'])
+            newVar = col + '_Bin'
+            allData[newVar] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+            var_bin_list.append(newVar)
+        continous_merged_dict[col] = cutOff
+        # 需要保存每个变量的分割点
+        # save_variable_cutOffPoint = open('variable_cutOffPoint_dict.pkl','wb')
+        # pickle.dump(continous_merged_dict, save_variable_cutOffPoint)
+        # save_variable_cutOffPoint.close()
+
+    '''
+        第四步：WOE编码、计算IV
+    '''
+    WOE_dict = {}
+    IV_dict = {}
+    # 分箱后的变量进行编码，包括：
+    # 1，初始取值个数小于5，且不需要合并的类别型变量。存放在less_value_features中
+    # 2，初始取值个数小于5，需要合并的类别型变量。合并后新的变量存放在var_bin_list中
+    # 3，初始取值个数超过5，需要合并的类别型变量。合并后新的变量存放在var_bin_list中
+    # 4，连续变量。分箱后新的变量存放在var_bin_list中
+    all_var = var_bin_list + less_value_feature
+    for var in all_var:
+        woe_iv = CalcWOE(allData, var, 'target')
+        WOE_dict[var] = woe_iv['WOE']
+        IV_dict[var] = woe_iv['IV']
+    IV_dict_sorted = sorted(IV_dict.items(), key=lambda x: x[1], reverse=True)
+
+    IV_values = [i[1] for i in IV_dict_sorted]
+    IV_name = [i[0] for i in IV_dict_sorted]
+    plt.bar(x=range(len(IV_name)), height=IV_values, label='feature IV', alpha=0.8, width=0.3)
 
 
 if __name__ == '__main__':
