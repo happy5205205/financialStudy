@@ -564,7 +564,7 @@ def binning_num(df, target, col, max_bin=None, min_binpct=None):
 """
 
 
-def binning_sparse_col(df, target, col, max_bin=None, min_binpct=0, sparse_value=[]):
+def binning_sparse_col(df, target, col, max_bin=None, min_binpct=0, sparse_value=None):
     """
     :param df: 数据集
     :param target: 好坏标记的字段名
@@ -685,7 +685,7 @@ def get_feature_result(df, target):
         err_col1 = []
         for col in tqdm(num_col1):
             try:
-                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=[-99998,-999978])
+                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=-99998)
                 bin_df1['rank'] = list(range(1, bin_df1.shape[0] + 1, 1))
                 bin_num_list1.append(bin_df1)
             except (IndexError, ZeroDivisionError):
@@ -697,9 +697,10 @@ def get_feature_result(df, target):
         for col in tqdm(num_col2):
             try:
                 bin_df2 = binning_num(df, 'label', col, min_binpct=0.05, max_bin=5)
+                # bin_df2 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=[-99998, -999978])
                 bin_df2['rank'] = list(range(1, bin_df2.shape[0] + 1, 1))
                 bin_num_list2.append(bin_df2)
-            except (IndexError, ZeroDivisionError):
+            except (IndexError, ZeroDivisionError, RuntimeError):
                 err_col2.append(col)
             continue
         print('数值型变量分箱结束')
@@ -750,7 +751,8 @@ def main():
     # else:
     #     df = pd.read_csv(file_path+'/'+feature_file, encoding='gbk')
 
-    df = pd.read_csv('D:/financialStudy/scorecardModel/python37_version/data/test_file.csv')
+
+    df = pd.read_csv('D:/financialStudy/Auto_bin/test_file.csv')
 
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
     result_bin = get_feature_result(df_feature, 'label')
