@@ -633,7 +633,107 @@ def main():
 
     IV_values = [i[1] for i in IV_dict_sorted]
     IV_name = [i[0] for i in IV_dict_sorted]
-    plt.bar(x=range(len(IV_name)), height=IV_values, label='feature IV', alpha=0.8, width=0.3)
+    plt.figure(figsize=(10, 10))
+    plt.bar(x=range(len(IV_name)), height=IV_values, label='feature IV', alpha=0.8)
+    plt.xticks(np.arange(len(IV_name)), IV_name)
+    plt.xticks(rotation='90')  # x轴坐标字体旋转
+    plt.subplots_adjust(left=0.25, wspace=0.25, hspace=0.25, bottom=0.4, top=0.91)  # 防止x轴字过长超出边界设置
+    plt.show()
+
+    '''
+    第五步：单变量分析和多变量分析，均基于WOE编码后的值。
+    （1）选择IV高于0.01的变量
+    （2）比较两两线性相关性。如果相关系数的绝对值高于阈值，剔除IV较低的一个
+    '''
+    high_IV = {k: v for k, v in IV_dict.items() if v > 0.01}
+    high_IV_sorted = sorted(high_IV.items(), key=lambda x: x[1], reverse=True)
+    short_list = high_IV.keys()
+    short_list_2 = []
+    for var in short_list:
+        newVar = var + '_WOE'
+        allData[newVar] = allData[var].map(WOE_dict[var])
+        short_list_2.append(newVar)
+    import seaborn as sns
+    allDataWOE = allData[short_list_2]
+    corr = allDataWOE.corr()
+    mask = np.zeros_like(corr)
+    mask[np.triu_indices_from(mask)] = True
+    ax = sns.heatmap(corr, cmap="YlGnBu", linewidths=0.5, vmax=1, vmin=0, annot=True, annot_kws={'size': 6, 'weight': 'bold'})
+    # 热力图参数设置（相关系数矩阵，颜色，每个值间隔等）
+    plt.xticks(np.arange(len(short_list_2)) + 0.5, short_list_2, fontsize=12)  # 横坐标标注点
+    plt.yticks(np.arange(len(short_list_2)) + 0.5, short_list_2, fontsize=12)  # 纵坐标标注点
+    ax.set_title('多变量相关性分析')  # 标题设置
+    plt.subplots_adjust(left=0.25, wspace=0.25, hspace=0.25, bottom=0.4, top=0.9)
+    plt.show()
+
+    # 两两间的线性相关性检验
+    # 1，将候选变量按照IV进行降序排列
+    # 2，计算第i和第i+1的变量的线性相关系数
+    # 3，对于系数超过阈值的两个变量，剔除IV较低的一个
+    deleted_index = []
+    cnt_vars = len(high_IV_sorted)
+    for i in range(cnt_vars):
+        if i in deleted_index:
+            continue
+        x1 = high_IV_sorted[i][0] + '_WOE'
+        for j in range(cnt_vars):
+            if i==j or j in deleted_index:
+                continue
+            y1 = high_IV_sorted[j][0] + '_WOE'
+            roh = np.corrcoef(allData[x1], allData[y1])[0, 1]
+            if abs(roh) > 0.7:
+                x1_IV = high_IV_sorted[i][1]
+                y1_IV = high_IV_sorted[j][1]
+                if x1_IV > y1_IV:
+                    deleted_index.append(j)
+                else:
+                    deleted_index.append(i)
+
+    '''
+    多变量分析：VIF
+    '''
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+    multi_analysis_vars_1 = [high_IV_sorted[i][0] + '_WOE' for i in range(cnt_vars) if i not in deleted_index]
+    X = np.matrix(allData[multi_analysis_vars_1])
+    VIF_list = [variance_inflation_factor(X, i) for i in range(X.shape[1])]
+    max_VIF = max(VIF_list)
+    print('最大的VIF是:{}'.format(max_VIF))
+    multi_analysis_vars = multi_analysis_vars_1
+
+    '''
+    第六步：逻辑回归模型。
+    要求：
+    1，变量显著
+    2，符号为负
+    '''
+    from sklearn.model_selection import train_test_split
+    trainData, testData = train_test_split(allData, test_size=1/4, random_state=3)
+    y_train = trainData['target']
+    X_train = trainData[multi_analysis_vars]
+    # X_train['intercept'] = [1] * X.shape[0]
+    import statsmodels.api as sm
+    LR = sm.Logit(y_train, X_train).fit()
+    print('----'*30)
+    summary = LR.summary()
+    print(summary)
+    pvals = LR.pvalues
+    pvals = pvals.to_dict()
+    value = [float(v) for v in pvals.values()]
+
+    train_pred = LR.predict(X_train)
+    trainData['train_pred'] = train_pred
+    from sklearn.metrics import roc_curve, auc
+    fpr, tpr, threshold = roc_curve(y_train, train_pred)
+    AUC = auc(fpr, tpr)
+    train_ks = max(abs(tpr-fpr))
+    from sklearn.linear_model import LogisticRegression
+    lr = LogisticRegression()
+    lr.fit(X_train, y_train)
+
+    train_pred2= lr.predict_proba(X_train)[:, 1]
+    fpr, tpr, threshold = roc_curve(y_train, train_pred2)
+    AUC2 = auc(fpr, tpr)
+    train_ks2 = max(abs(tpr - fpr))
 
 
 if __name__ == '__main__':
