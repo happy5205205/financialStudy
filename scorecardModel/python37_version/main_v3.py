@@ -172,12 +172,15 @@ def main():
     more_value_feature = []  # 存放变量取值大于5
     less_value_feature = []  # 存放变量取值少于5
 
-    for col in cat_features:
-        valuesCounts = len(set(trainData[col]))
-        if valuesCounts > 5:
-            more_value_feature.append(col)  # 取值超过5的变量，需要bad rate编码，再用卡方分箱法进行分箱
-        else:
-            less_value_feature.append(col)  # 如果每种类别同时包含好坏样本，无需分箱, 如果有类别只包含好坏样本的一种，需要合并
+    more_value_feature = [col for col in cat_features if len(set(trainData[col])) > 5]  # 存放变量取值大于5
+    less_value_feature = [col for col in cat_features if len(set(trainData[col])) <= 5]  # 存放变量取值少于5
+
+    # for col in cat_features:
+    #     valuesCounts = len(set(trainData[col]))
+    #     if valuesCounts > 6:
+    #         more_value_feature.append(col)  # 取值超过5的变量，需要bad rate编码，再用卡方分箱法进行分箱
+    #     else:
+    #         less_value_feature.append(col)  # 如果每种类别同时包含好坏样本，无需分箱, 如果有类别只包含好坏样本的一种，需要合并
     # (i)取值<5时：如果每种类别同时包含好坏样本，无需分箱；如果有类别只包含好坏样本的一种，需要合并
     merge_bin_dict = {}  # 存放需要合并的变量，以及合并方法
     var_bin_list = []  # 由于某个取值没有好或者坏样本而需要合并的变量
@@ -186,7 +189,7 @@ def main():
         binBadRate = utils_v3.BinBadRate(df=trainData, col=col, target='target')[0]
         # print('{}的取值根据标签分组不同属性的坏样本比例为{}'.format(col, binBadRate))
         if min(binBadRate.values()) == 0:
-            print('{}标签中存在坏样本比例为0，需要合并'.format(col))
+            print('\n{}标签中存在坏样本比例为0，需要合并'.format(col))
             combine_bin = utils_v3.MergeBad0(df=trainData, col=col, target='target')
             # print(combine_bin)
             merge_bin_dict[col] = combine_bin
@@ -195,7 +198,7 @@ def main():
             var_bin_list.append(newVar)
 
         if max(binBadRate.values()) == 1:
-            print('{}标签中存在好样本比例为0，需要合并'.format(col))
+            print('\n{}标签中存在好样本比例为0，需要合并'.format(col))
             combine_bin = utils_v3.MergeBad0(df=trainData, col=col, target='target')
             merge_bin_dict[col] = combine_bin
             newVar = col + '_Bin'
@@ -203,11 +206,11 @@ def main():
             var_bin_list.append(newVar)
 
     # 保存需要合并的变量，以及合并方法merge_bin_dict
-    merge_bin_dict_file = open(outPath + 'merge_bin_dict.pkl', 'wb')
-    pickle.dump(merge_bin_dict, merge_bin_dict_file)
-    merge_bin_dict_file.close()
+    # merge_bin_dict_file = open(outPath + 'merge_bin_dict.pkl', 'wb')
+    # pickle.dump(merge_bin_dict, merge_bin_dict_file)
+    # merge_bin_dict_file.close()
 
-    # less_value_feature中剔除需要合并的变量
+    # less_value_feature中剔除不需要合并的变量
     less_value_feature = [i for i in less_value_feature if i + '_Bin' not in var_bin_list]
 
     # （ii）当取值>5时：用bad rate进行编码，放入连续型变量里
@@ -220,36 +223,40 @@ def main():
         num_features.append(col + '_br_encoding')
 
     # 保存需要用坏样本率编码的变量br_encoding_dict
-    br_encoding_dict_file = open(outPath + 'br_encoding_dict.pkl', 'wb')
-    pickle.dump(br_encoding_dict, br_encoding_dict_file)
-    br_encoding_dict_file.close()
+    # br_encoding_dict_file = open(outPath + 'br_encoding_dict.pkl', 'wb')
+    # pickle.dump(br_encoding_dict, br_encoding_dict_file)
+    # br_encoding_dict_file.close()
 
     # （iii）对连续型变量进行分箱，包括（ii）中的变量
     continous_merged_dict = {}
     for col in tqdm(num_features):
-        print('{} is in processing'.format(col))
+        print('\n{} is in processing'.format(col))
         # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
         if -1 not in set(trainData[col]):
             # 分箱后的最多的箱数
             max_interval = 5
             cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[],
                                        minBinPcnt=0)
-            print('{}变量的切割点是{}'.format(col, cutOff))
+            print('\n{}变量的切割点是{}'.format(col, cutOff))
             trainData[col+'_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
             # 检验分箱后的单调性是否满足
-            print('正在检验变量{}的单调性'.format(col))
+            print('\n正在检验变量{}的单调性'.format(col))
             monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
-            while (not monotone):
-                # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
-                max_interval -= 1
-                cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
-                trainData[col + '_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
-                if max_interval == 2:
-                    # 当分箱数为2时，必然单调
-                    break
-                monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
-            newVar = col + '_Bin'
-            trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
+            if monotone is True:
+                print('\n{}变量满足单调性'.format(col + '_Bin'))
+            else:
+                print('\n{}变量不满足单调性'.format(col + '_Bin'))
+            # while (not monotone):
+            #     # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
+            #     max_interval -= 1
+            #     cutOff = utils_v3.ChiMerge(df=trainData, col=col, target='target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
+            #     trainData[col + '_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
+            #     if max_interval == 2:
+            #         # 当分箱数为2时，必然单调
+            #         break
+            #     monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target')
+            # newVar = col + '_Bin'
+            # trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[]))
             var_bin_list.append(newVar)
         else:
             max_interval = 5
@@ -257,24 +264,28 @@ def main():
             cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval, special_attribute=[-1], minBinPcnt=0)
             trainData[col + '_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
             monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target', ['Bin -1'])
-            while (not monotone):
-                max_interval -= 1
-                # 如果有－1，－1的bad rate不参与单调性检验
-                cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval, special_attribute=[-1],
-                                           minBinPcnt=0)
-                trainData[col + '_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
-                if max_interval == 3:
-                    # 当分箱数为3-1=2时，必然单调
-                    break
-                monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target', ['Bin -1'])
-            newVar = col + '_Bin'
-            trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
+            if monotone is True:
+                print('\n{}变量满足单调性'.format(col + '_Bin'))
+            else:
+                print('\n{}变量不满足单调性'.format(col + '_Bin'))
+            # while (not monotone):
+            #     max_interval -= 1
+            #     # 如果有－1，－1的bad rate不参与单调性检验
+            #     cutOff = utils_v3.ChiMerge(trainData, col, 'target', max_interval=max_interval, special_attribute=[-1],
+            #                                minBinPcnt=0)
+            #     trainData[col + '_Bin'] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
+            #     if max_interval == 3:
+            #         # 当分箱数为3-1=2时，必然单调
+            #         break
+            #     monotone = utils_v3.BadRateMonotone(trainData, col + '_Bin', 'target', ['Bin -1'])
+            # newVar = col + '_Bin'
+            # trainData[newVar] = trainData[col].map(lambda x: utils_v3.AssignBin(x, cutOff, special_attribute=[-1]))
             var_bin_list.append(newVar)
         continous_merged_dict[col] = cutOff
     # 需要保存每个变量的分割点
-    continous_merged_dict_file = open(outPath+'continous_merged_dict.pkl', 'wb')
-    pickle.dump(continous_merged_dict, continous_merged_dict_file)
-    continous_merged_dict_file.close()
+    # continous_merged_dict_file = open(outPath+'continous_merged_dict.pkl', 'wb')
+    # pickle.dump(continous_merged_dict, continous_merged_dict_file)
+    # continous_merged_dict_file.close()
 
     '''
         第四步：WOE编码、计算IV
@@ -319,7 +330,7 @@ def main():
     （1）选择IV高于0.01的变量
     （2）比较两两线性相关性。如果相关系数的绝对值高于阈值，剔除IV较低的一个
     '''
-    high_IV = {k: v for k, v in IV_dict.items() if v >= 0.02}
+    high_IV = {k: v for k, v in IV_dict.items() if v >= 0.01}
     high_IV_sorted = sorted(high_IV.items(), key=lambda x: x[1], reverse=True)
 
     short_list = high_IV.keys()
@@ -330,10 +341,11 @@ def main():
         short_list_2.append(newVar)
 
     # 对于上一步的结果，计算相关系数矩阵，并画出热力图进行数据可视化
+    import seaborn as sns
     trainDataWOE = trainData[short_list_2]
-    # f, ax = plt.figure(figsize=(10, 8))
+    f, ax = plt.figure(figsize=(10, 8))
     corr = trainDataWOE.corr()
-    # sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True), square=True, ax=ax)
+    sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True), square=True, ax=ax)
 
     # 两两间的线性相关性检验
     # 1，将候选变量按照IV进行降序排列
@@ -346,7 +358,7 @@ def main():
             continue
         x1 = high_IV_sorted[i][0] + '_WOE'
         for j in range(cnt_vars):
-            if i==j or j in deleted_index:
+            if i == j or j in deleted_index:
                 continue
             y1 = high_IV_sorted[j][0]+'_WOE'
             roh = np.corrcoef(trainData[x1], trainData[y1])[0, 1]
@@ -366,7 +378,7 @@ def main():
 
     VIF_list = [variance_inflation_factor(X, i) for i in range(X.shape[1])]
     max_VIF = max(VIF_list)
-    print ('最大的VIF是{}'.format(max_VIF))
+    print('最大的VIF是{}'.format(max_VIF))
     multi_analysis = multi_analysis_vars_1
 
     '''
