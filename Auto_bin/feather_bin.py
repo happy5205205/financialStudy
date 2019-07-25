@@ -20,7 +20,8 @@ def missing_cal(df):
         :param df: 数据集
         :return: 每个变量的缺失率
     """
-    missing_series = df.isnull().sum() / df.shape[0]  # 此处需要修改
+    df2 = df.copy()
+    missing_series = df2.isnull().sum() / df2.shape[0]  # 此处需要修改
     missing_df = pd.DataFrame(missing_series).reset_index()
     missing_df = missing_df.rename(columns={'index': 'col',
                                             0: 'missing_pct'})
@@ -38,12 +39,13 @@ def missing_cal(df):
 
 def missing_delete_var(df, threshold=None):
     """
-    :param df: 数据集
-    :param threshold: 确实率删除的阈值
-    :return: 删除后的数据集
+        特征缺失处理
+        :param df: 数据集
+        :param threshold: 确实率删除的阈值
+        :return: 删除后的数据集
     """
     df2 = df.copy()
-    missing_df = missing_cal(df)
+    missing_df = missing_cal(df2)
     missing_col_num = missing_df[missing_df.missing_pct >= threshold].shape[0]
     missing_col = list(missing_df[missing_df.missing_pct >= threshold].col)
     df2 = df2.drop(missing_col, axis=1)
@@ -51,8 +53,14 @@ def missing_delete_var(df, threshold=None):
 
 
 def missing_delete_user(df, threshold=None):
+    """
+        样本缺失处理
+        :param df:
+        :param threshold:
+        :return:
+    """
     df2 = df.copy()
-    missing_series = df.isnull().sum(axis=1)
+    missing_series = df2.isnull().sum(axis=1)
     missing_list = list(missing_series)
     missing_index_list = []
     for i, j in enumerate(missing_list):
@@ -99,14 +107,19 @@ def const_delete(df, col_list, threshold=None):
 """
 
 
-def data_processing(df, target):
+def data_processing(df, target, button=True):
     """
     :param df: 包含了label（target）和特征的宽表
     :param target: label（target）
     :return: 清洗后的数据集
     """
+    if button is True:
+        miss_list = [-99998, -999978, -999977, -999976, -999979, -99999]
+        for miss in miss_list:
+            df = df.replace(miss, np.nan)
+
     # 特征缺失处理
-    df = missing_delete_var(df, threshold=0.8)
+    df = missing_delete_var(df, threshold=0.9)
     # 样本缺失处理
     df = missing_delete_user(df, threshold=int(df.shape[1] * 0.8))
     col_list = [x for x in df.columns if x != target]
@@ -122,20 +135,23 @@ def data_processing(df, target):
     # 缺失值计算和填充
     miss_df = missing_cal(df)
     # 取出类别型特征
-    cate_col = list(df.select_dtypes(include=['O']).columns)
+    cate_col1 = list(df.select_dtypes(include=['O']).columns)
+    cate_col2 = [col for col in df.columns if len(set(list(df[col]))) <=5 and col != 'label'] # 取值小于5的数字型特征作为类别型特征
+    cate_col = cate_col1 + cate_col2
     # 取出数字型特征
-    num_col = [x for x in list(df.select_dtypes(include=['int64', 'float64']).columns) if x != 'label']
+    num_col = [col for col in list(df.select_dtypes(include=['int64', 'float64']).columns) if col != 'label' and len(set(list(df[col]))) >5]
+    # num_col2 = [col for col in df.columns if len(set(list(df[col]))) >5 and col != 'label'] # 取值大于5的作为数字型特征
+    # num_col = num_col1 + num_col2
 
+    # 类别型特征缺失值大于60%以上特征
+    cate_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.6]['col']) if x in cate_col]
+    # 类别型特征缺失值小于等于60%的特征
+    cate_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.6]['col']) if x in cate_col]
 
-    # 类别型特征缺失值大于5%以上特征
-    cate_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in cate_col]
-    # 类别型特征缺失值小于等于5%的特征
-    cate_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in cate_col]
-
-    # 数字型特征缺失值大于5%特征
-    num_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
-    # 数字型特征缺失值小于等于5%的特征
-    num_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in num_col]
+    # 数字型特征缺失值大于60%特征
+    num_miss_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.6]['col']) if x in num_col]
+    # 数字型特征缺失值小于等于60%的特征
+    num_miss_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.6]['col']) if x in num_col]
 
     # 分类型特征填充
     for col in cate_miss_col1:
@@ -149,7 +165,7 @@ def data_processing(df, target):
     for col in num_miss_col2:
         df[col] = df[col].fillna(df[col].median())
 
-    return df, miss_df
+    return df, miss_df, cate_col,num_col
 
 
 ###############################################################################################################
@@ -580,8 +596,8 @@ def binning_sparse_col(df, target, col, max_bin=None, min_binpct=0, sparse_value
     good = total - bad
 
     # 对稀疏值0值或者缺失值单独分箱
-    temp1 = df.loc[df[col].isin(sparse_value)]
-    temp2 = df.loc[~df[col].isin(sparse_value)]
+    temp1 = df[df[col] == sparse_value]
+    temp2 = df[~(df[col] == sparse_value)]
 
     bucket_sparse = pd.cut(temp1[col], [float('-inf'), sparse_value])
     group1 = temp1.groupby(bucket_sparse)
@@ -660,11 +676,11 @@ def get_feature_result(df, target):
     else:
 
         print('----------------------------------数据清洗开始----------------------------------')
-        df, miss_df = data_processing(df, target)
+        df, miss_df, cate_col, num_col = data_processing(df, target)
         print('----------------------------------数据清洗完成----------------------------------')
 
-        cate_col = list(df.select_dtypes(include=['O']).columns)
-        num_col = [x for x in list(df.select_dtypes(include=['int64', 'float64']).columns) if x != 'label']
+        # cate_col = list(df.select_dtypes(include=['O']).columns)
+        # num_col = [x for x in list(df.select_dtypes(include=['int64', 'float64']).columns) if x != 'label']
 
         print('----------------------------------数据分箱开始----------------------------------')
         # 类别型变量分箱
@@ -677,15 +693,15 @@ def get_feature_result(df, target):
         print('类别型变量分箱结束')
 
         # 数值型特征分箱
-        num_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.05]['col']) if x in num_col]
-        num_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.05]['col']) if x in num_col]
+        num_col1 = [x for x in list(miss_df[miss_df.missing_pct > 0.6]['col']) if x in num_col]
+        num_col2 = [x for x in list(miss_df[miss_df.missing_pct <= 0.6]['col']) if x in num_col]
 
         print('数值型变量分箱开始')
         bin_num_list1 = []
         err_col1 = []
         for col in tqdm(num_col1):
             try:
-                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=-99998)
+                bin_df1 = binning_sparse_col(df, 'label', col, min_binpct=0, max_bin=5, sparse_value=-999)
                 bin_df1['rank'] = list(range(1, bin_df1.shape[0] + 1, 1))
                 bin_num_list1.append(bin_df1)
             except (IndexError, ZeroDivisionError):
@@ -696,7 +712,7 @@ def get_feature_result(df, target):
         err_col2 = []
         for col in tqdm(num_col2):
             try:
-                bin_df2 = binning_num(df, 'label', col, min_binpct=0.05, max_bin=5)
+                bin_df2 = binning_num(df, 'label', col, min_binpct=0, max_bin=5)
                 # bin_df2 = binning_sparse_col(df, 'label', col, min_binpct=0.05, max_bin=4, sparse_value=[-99998, -999978])
                 bin_df2['rank'] = list(range(1, bin_df2.shape[0] + 1, 1))
                 bin_num_list2.append(bin_df2)
@@ -727,7 +743,7 @@ def get_feature_result(df, target):
 
         bin_all_list = bin_num_list1 + bin_num_list2 + bin_num_list3 + bin_cate_list
 
-        feature_result = pd.concat(bin_all_list, axis=0)
+        feature_result = pd.concat(bin_all_list, axis=0, sort=False)
         feature_result = feature_result.sort_values(['IV', 'rank'], ascending=[False, True])
         feature_result = feature_result.drop(['rank'], axis=1)
         order_col = ['特征名', '分箱结果', '样本数', '黑样本数', '白样本数', '逾期用户占比', 'WOE', 'IV', '准确率', '召回率', '打扰率', 'KS']
@@ -752,7 +768,7 @@ def main():
     #     df = pd.read_csv(file_path+'/'+feature_file, encoding='gbk')
 
 
-    df = pd.read_csv('D:/financialStudy/Auto_bin/test_file.csv')
+    df = pd.read_csv('gm_model.csv')
 
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
     result_bin = get_feature_result(df_feature, 'label')
