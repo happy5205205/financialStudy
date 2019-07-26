@@ -441,6 +441,54 @@ def CalcWOE(df, col, target):
     IV = sum(IV)
     return {"WOE": WOE_dict, 'IV': IV}
 
+def Prob2Score(prob, basePoint, PDO):
+    """
+        将概率映射成分数
+        :param prob:
+        :param basePoint:
+        :param PDO:
+        :return:
+    """
+    y =  np.log(prob/(1-prob))
+    score = int(basePoint + PDO/np.log(2)*(-y))
+    return score
+
+
+def KS(df, score, target):
+    '''
+    :param df: 包含目标变量与预测值的数据集
+    :param score: 得分或者概率
+    :param target: 目标变量
+    :return: KS值
+    '''
+    total = df.groupby(score)[target].count()
+    bad = df.groupby(score)[target].sum()
+    regroup = pd.DataFrame({'total':total, 'bad':bad})
+    regroup['good'] = regroup['total'] - regroup['bad']
+    regroup[score] = regroup.index
+    regroup = regroup.sort_values(by=score, ascending=False)
+    regroup.index = range(len(regroup))
+    regroup['badCumRate'] = regroup['bad'].cumsum()/regroup['bad'].sum()
+    regroup['goodCumRate'] = regroup['good'].cumsum()/regroup['good'].sum()
+    ks_value = regroup.apply(lambda x:x.badCumRate-x.goodCumRate, axis=1)
+    return max(ks_value)
+
+
+def Gini(df, score, target):
+    total = df.groupby(score)[target].count()
+    bad = df.groupby(score)[target].sum()
+    regroup = pd.DataFrame({'total': total, 'bad': bad})
+    regroup[score] = regroup.index
+    # regroup.reset_index(drop=True)
+    regroup = regroup.sort_values(by=score, ascending=False)
+    regroup.index = range(len(regroup))
+    regroup['badCumRate'] = regroup['bad'].cumsum() / regroup['bad'].sum()
+    regroup['totalCumRate'] = regroup['total']/ regroup['total'].sum()
+    regroup['rate'] = (1-regroup['badCumRate'])*regroup['badCumRate']
+    regroup['ginirate'] = regroup['rate']*regroup['totalCumRate']
+    # gini_value = regroup.apply(lambda x: (x.total/sum(x.total)) - (1-x.badCumRate + 0.00001)*x.badCumRate, axis=1)
+    # gini_value = regroup.apply(lambda x: (regroup['total']/sum(regroup['total'])) * ((1 - regroup['badCumRate']) * regroup['badCumRate']))
+    return sum(regroup['ginirate'])
 
 def main():
     data_path = './data'
@@ -710,6 +758,8 @@ def main():
     trainData, testData = train_test_split(allData, test_size=1/4, random_state=3)
     y_train = trainData['target']
     X_train = trainData[multi_analysis_vars]
+    y_test = testData['target']
+    X_test = testData[multi_analysis_vars]
     # X_train['intercept'] = [1] * X.shape[0]
     import statsmodels.api as sm
     LR = sm.Logit(y_train, X_train).fit()
@@ -718,19 +768,43 @@ def main():
     print(summary)
     pvals = LR.pvalues
     pvals = pvals.to_dict()
-    value = [float(v) for v in pvals.values()]
 
     train_pred = LR.predict(X_train)
     trainData['train_pred'] = train_pred
+    train_ks = KS(trainData, 'train_pred', 'target')
+
+    test_pred = LR.predict(X_test)
+    testData['test_pred'] = test_pred
+    test_ks = KS(testData, 'test_pred','target')
+
+    basePoint = 600
+    PDO = 20
+    trainData['score'] = trainData['train_pred'].map(lambda x:Prob2Score(x, basePoint=basePoint, PDO=PDO))
+    # plt.hist(trainData['score'], 100)
+    # plt.xlabel('score')
+    # plt.ylabel('freq')
+    # plt.title('train_distribution')
+    testData['score'] = testData['test_pred'].map(lambda x: Prob2Score(x, basePoint=basePoint, PDO=PDO))
+    # plt.hist(testData['score'], 100)
+    # plt.xlabel('score')
+    # plt.ylabel('freq')
+    # plt.title('test_distribution')
+
+    # 计算基尼指数
+    gini = Gini(testData,'score','target')
+
+
     from sklearn.metrics import roc_curve, auc
-    fpr, tpr, threshold = roc_curve(y_train, train_pred)
+    fpr, tpr, threshold = roc_curve(y_test, test_pred)
     AUC = auc(fpr, tpr)
     train_ks = max(abs(tpr-fpr))
+
+
     from sklearn.linear_model import LogisticRegression
     lr = LogisticRegression()
     lr.fit(X_train, y_train)
-
     train_pred2= lr.predict_proba(X_train)[:, 1]
+    trainData['train_pred2'] = train_pred2
     fpr, tpr, threshold = roc_curve(y_train, train_pred2)
     AUC2 = auc(fpr, tpr)
     train_ks2 = max(abs(tpr - fpr))
