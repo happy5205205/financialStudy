@@ -757,16 +757,21 @@ def get_feature_result(df, target):
 
 
 def main():
-    # if len(sys.argv)==1:
-    #     print('请数据特征数据文件：')
-    #     sys.exit()
-    # feature_file = sys.argv[1]
-    # file_path=os.getcwd()
-    # if 'xlsx' in feature_file or 'xls' in feature_file:
-    #     df = pd.read_excel(file_path+'/'+feature_file,encoding='gbk')
-    # else:
-    #     df = pd.read_csv(file_path+'/'+feature_file, encoding='gbk')
-
+    if len(sys.argv)==1:
+        print('请数据特征数据文件：')
+        # sys.exit()
+    feature_file = sys.argv[1]
+    file_path=os.getcwd()
+    if 'xlsx' in feature_file or 'xls' in feature_file:
+        df = pd.read_excel(file_path+'/'+feature_file,encoding='gbk')
+    else:
+        for decode in ('gbk', 'utf-8', 'gb18030'):
+            try:
+                df = pd.read_csv(file_path+'/'+feature_file, encoding=decode, error_bad_lines=False)
+                print('data-' + decode + '-success!!')
+                break
+            except:
+                pass
 
     df = pd.read_csv('gm_model.csv')
 
