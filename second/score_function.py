@@ -13,6 +13,9 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
+plt.rcParams["font.sans-serif"] = ["SimHei"]  # 显示中文
+plt.rcParams["axes.unicode_minus"] = False  # 正常显示符号
+
 def CareerYear(x):
     # 对工作年限进行修改
     x = str(x)
@@ -475,6 +478,13 @@ def KS(df, score, target):
 
 
 def Gini(df, score, target):
+    """
+
+        :param df: 数据集
+        :param score: 概率或分数二选一
+        :param target: 目标变量
+        :return:
+    """
     total = df.groupby(score)[target].count()
     bad = df.groupby(score)[target].sum()
     regroup = pd.DataFrame({'total': total, 'bad': bad})
@@ -489,6 +499,134 @@ def Gini(df, score, target):
     # gini_value = regroup.apply(lambda x: (x.total/sum(x.total)) - (1-x.badCumRate + 0.00001)*x.badCumRate, axis=1)
     # gini_value = regroup.apply(lambda x: (regroup['total']/sum(regroup['total'])) * ((1 - regroup['badCumRate']) * regroup['badCumRate']))
     return sum(regroup['ginirate'])
+
+
+def psi(actual, expected, title='PSI', quant=10):
+	"""
+        衡量测试样本与模型开发样本评分的分布差异
+        param actual: 实际输出概率
+        param expected: 预期输出概率
+        param title: 名称
+        param quant: 将输出概率按照10等分
+
+        公式: PSI = sum(（实际占比-预期占比）* ln(实际占比/预期占比))
+        步骤：
+        1、训练按输出概率p1从小到大排序10等分
+        2、在新样本的预测中，输出概率p2从小到大排序，按p1区间10等分
+        3、计算。其中实际占比：p2上各区间的用户占比
+        预期占比：p1上各区间的用户占比
+        psi<0.1 稳定性很高
+        0.1<=psi<=0.25 稳定性一般
+        psi>0.25 稳定性很差，重做
+	"""
+	plt.rcParams['font.sans-serif']=['SimHei']  # 显示中文
+	plt.rcParams['axes.unicode_minus']=False  # 正常显示符号
+	min_v = min(min(actual['train_pred']), min(expected['test_pred']))  # 两样本输出概率的最小值
+	max_v = max(max(actual['train_pred']), max(expected['test_pred']))  # 两样本输出概率的最大值
+	interval = 1.0*(max_v-min_v)/quant
+	acnt = []
+	ecnt = []
+	s, e = min_v, min_v + interval
+	act = np.array(actual)
+	expe = np.array(expected)
+	# 分组
+	while float(e) <= max_v:
+		acnt.append(((act >= s) & (act < e)).sum())
+		ecnt.append(((expe >= s) & (expe < e)).sum())
+		s = e
+		e = e + interval
+	arate = np.array(acnt) / len(actual)
+	erate = np.array(ecnt) / len(expected)
+	arate[arate==0] = 0.000001
+	erate[erate==0] = 0.000001
+	# 计算psi值
+	psi = np.sum((arate - erate)*np.log(arate/erate))
+	# 画图
+	x1 = np.linspace(0, len(acnt)-1, len(acnt)) -0.2
+	x2 = np.linspace(0, len(acnt)-1, len(acnt)) +0.2
+	plt.bar(x1, arate*100, alpha=0.9, width=0.4, facecolor="orange", edgecolor="white")
+	plt.bar(x2, erate*100, alpha=0.9, width=0.4, facecolor="lightblue", edgecolor="white")
+	#plt.legend() # 显示网格
+	plt.suptitle(title)
+	plt.show()
+	return psi
+
+
+def lift_chart(df):
+    """
+        提升图
+    """
+    # plt.rcParams["font.sans-serif"] = ["SimHei"]  # 显示中文
+    # plt.rcParams["axes.unicode_minus"] = False  # 正常显示符号
+    df = df.sort_values(by="test_pred", ascending=False)  # 按输出概率降序
+    df = df.reset_index(drop=True)
+    # 计算占比
+    rows = []
+    for group in np.array_split(df, 10):
+        Sum_defaults = group['target'].sum()
+        rows.append({'total': len(group), 'bad': Sum_defaults})
+    lift = pd.DataFrame(rows)
+    lift['obs'] = 100
+    lift['BadCapturedByModel'] = lift['bad'] / lift['bad'].sum()
+    lift['BadCapturedRandomly'] = 10 / lift['obs']
+    lift['CumulativeBadByModel'] = np.nan
+    lift['CumulativeBadRandomly'] = np.nan
+    model_bad_list = list(lift['BadCapturedByModel'])
+    for i in range(len(model_bad_list)):
+        lift['CumulativeBadByModel'][i] = sum(model_bad_list[:i + 1])
+
+    random_bad_list = list(lift['BadCapturedRandomly'])
+    for i in range(len(random_bad_list)):
+        lift['CumulativeBadRandomly'][i] = sum(random_bad_list[:i + 1])
+    lift['Lift'] = lift['CumulativeBadByModel'] / lift['CumulativeBadRandomly']
+    plt.figure(figsize=(10, 8))
+    plt.subplot(1, 2, 1)
+    bar_width = 0.3
+    plt.bar(x=range(1,len(model_bad_list)+1), height=list(lift['BadCapturedByModel']),
+            label='BadCapturedByModel', alpha=0.8, width=bar_width)
+    plt.bar(x=np.arange(1, len(random_bad_list)+1) + bar_width, height=list(lift['BadCapturedRandomly']),
+            label='BadCapturedRandomly', alpha=0.8, width=bar_width)
+    # for x, y in enumerate(list(lift['BadCapturedByModel'])):
+    #     plt.text(x, y, '%.2f' % y, ha='center', va='bottom', fontsize=9)
+    # for x, y in enumerate(list(lift['BadCapturedRandomly'])):
+    #     plt.text(x + bar_width, y, '%.2f' % y, ha='center', va='top', fontsize=9)
+    plt.title('Lift Chart')
+    plt.xlabel('Decile')
+    plt.ylabel('BadRate')
+
+    plt.subplot(1,2,2)
+    plt.plot(lift['Lift'], marker='o')
+    plt.title('Cumlative Lift Chart')
+    plt.xlabel('Decile')
+    plt.ylabel('Lift')
+    plt.grid(True)
+    plt.savefig('Lift.jpg')
+    plt.close()
+    return lift
+
+
+def draw_lorenz(df):
+	"""洛伦兹曲线
+	"""
+	plt.rcParams["font.sans-serif"] = ["SimHei"]  # 显示中文
+	plt.rcParams["axes.unicode_minus"] = False  # 正常显示符号
+	df = df.sort_values(by="test_pred", ascending=False)  # 按输出概率降序
+	df = df.reset_index(drop=True)
+	Y = df.target
+	Y_lorenz = 100*(Y.cumsum()/Y.sum())  # 累计占比
+	Y_lorenz = np.array(Y_lorenz)
+	x = list(range(0, len(Y)))
+	x = np.array(x)
+	x = 100*x/len(Y)
+	plt.axis([0, 100, 0, 100])
+	st_line = np.arange(0, 101, 1)
+	plt.plot(x, Y, st_line)
+	plt.xlabel(u"累计单量占比")
+	plt.ylabel(u"累计违约占比")
+	plt.title(u"洛伦兹曲线")
+	plt.grid(True)  # 显示网格
+	plt.show()
+
 
 def main():
     data_path = './data'
@@ -793,8 +931,14 @@ def main():
     # 计算基尼指数
     gini = Gini(testData,'score','target')
 
+    # 计算LIFT提升度
+    lift = lift_chart(testData)
+
+    lorenz = draw_lorenz(testData)
+
 
     from sklearn.metrics import roc_curve, auc
+    ps = psi(trainData, testData)
     fpr, tpr, threshold = roc_curve(y_test, test_pred)
     AUC = auc(fpr, tpr)
     train_ks = max(abs(tpr-fpr))
