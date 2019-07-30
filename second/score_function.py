@@ -403,7 +403,6 @@ def BadRateMonotone(df, sortByVar, target, special_attribute=[]):
     regroup = BinBadRate(df2, sortByVar, target)[1]
     combined = zip(regroup['total'], regroup['bad'])
     badRate = [x[1]*1.0/x[0] for x in combined]
-    df3 = pd.DataFrame()
 
     badRateNotMonotone = [badRate[i] < badRate[i+1] and badRate[i] < badRate[i-1] or
                           badRate[i] > badRate[i+1] and badRate[i] > badRate[i-1]
@@ -479,7 +478,12 @@ def KS(df, score, target):
 
 def Gini(df, score, target):
     """
-
+        计算模型的基尼系数
+        小于0 不能用
+        0-0.4低
+        0.4-0.6中
+        0.6-0.8高
+        大于0.8极高
         :param df: 数据集
         :param score: 概率或分数二选一
         :param target: 目标变量
@@ -502,54 +506,91 @@ def Gini(df, score, target):
 
 
 def psi(actual, expected, title='PSI', quant=10):
-	"""
-        衡量测试样本与模型开发样本评分的分布差异
-        param actual: 实际输出概率
-        param expected: 预期输出概率
-        param title: 名称
-        param quant: 将输出概率按照10等分
+    """
+        计算模型的PSI
+        衡量测试样本与模型开发样本评分的分布差异
+        param actual: 实际输出概率(可以是训练集的输出概率)
+        param expected: 预期输出概率（可以是测试集的输出概率）
+        param title: 名称
+        param quant: 将输出概率按照10等分
 
-        公式: PSI = sum(（实际占比-预期占比）* ln(实际占比/预期占比))
-        步骤：
-        1、训练按输出概率p1从小到大排序10等分
-        2、在新样本的预测中，输出概率p2从小到大排序，按p1区间10等分
-        3、计算。其中实际占比：p2上各区间的用户占比
-        预期占比：p1上各区间的用户占比
-        psi<0.1 稳定性很高
-        0.1<=psi<=0.25 稳定性一般
-        psi>0.25 稳定性很差，重做
-	"""
-	plt.rcParams['font.sans-serif']=['SimHei']  # 显示中文
-	plt.rcParams['axes.unicode_minus']=False  # 正常显示符号
-	min_v = min(min(actual['train_pred']), min(expected['test_pred']))  # 两样本输出概率的最小值
-	max_v = max(max(actual['train_pred']), max(expected['test_pred']))  # 两样本输出概率的最大值
-	interval = 1.0*(max_v-min_v)/quant
-	acnt = []
-	ecnt = []
-	s, e = min_v, min_v + interval
-	act = np.array(actual)
-	expe = np.array(expected)
-	# 分组
-	while float(e) <= max_v:
-		acnt.append(((act >= s) & (act < e)).sum())
-		ecnt.append(((expe >= s) & (expe < e)).sum())
-		s = e
-		e = e + interval
-	arate = np.array(acnt) / len(actual)
-	erate = np.array(ecnt) / len(expected)
-	arate[arate==0] = 0.000001
-	erate[erate==0] = 0.000001
-	# 计算psi值
-	psi = np.sum((arate - erate)*np.log(arate/erate))
-	# 画图
-	x1 = np.linspace(0, len(acnt)-1, len(acnt)) -0.2
-	x2 = np.linspace(0, len(acnt)-1, len(acnt)) +0.2
-	plt.bar(x1, arate*100, alpha=0.9, width=0.4, facecolor="orange", edgecolor="white")
-	plt.bar(x2, erate*100, alpha=0.9, width=0.4, facecolor="lightblue", edgecolor="white")
-	#plt.legend() # 显示网格
-	plt.suptitle(title)
-	plt.show()
-	return psi
+        公式: PSI = sum(（实际占比-预期占比）* ln(实际占比/预期占比))
+        步骤：
+        1、训练按输出概率p1从小到大排序10等分
+        2、在新样本的预测中，输出概率p2从小到大排序，按p1区间10等分
+        3、计算。其中实际占比：p2上各区间的用户占比
+        预期占比：p1上各区间的用户占比
+        psi<0.1 稳定性很高
+        0.1<=psi<=0.25 稳定性一般
+        psi>0.25 稳定性很差，重做
+    """
+    plt.rcParams['font.sans-serif']=['SimHei'] # 显示中文
+    plt.rcParams['axes.unicode_minus']=False # 正常显示符号
+    min_v = min(min(actual), min(expected)) # 两样本输出概率的最小值
+    max_v = max(max(actual), max(expected))  # 两样本输出概率的最大值
+    # min_v = min(min(actual['train_pred']), min(expected['test_pred']))  # 两样本输出概率的最小值
+    # max_v = max(max(actual['train_pred']), max(expected['test_pred']))  # 两样本输出概率的最大值
+    interval = 1.0 * (max_v - min_v) / quant
+    acnt = []
+    ecnt = []
+    s, e = min_v, min_v + interval
+    act = np.array(actual)
+    expe = np.array(expected)
+    # 分组
+    while e <= max_v:
+        acnt.append(((act >= s) & (act < e)).sum())
+        ecnt.append(((expe >= s) & (expe < e)).sum())
+        s = e
+        e = e + interval
+    arate = np.array(acnt) / len(actual)
+    erate = np.array(ecnt) / len(expected)
+    arate[arate == 0] = 0.000001
+    erate[erate == 0] = 0.000001
+    # 计算psi值
+    psi = np.sum((arate - erate) * np.log(arate / erate))
+    # 画图
+    # x1 = np.linspace(0, len(acnt) - 1, len(acnt)) - 0.2
+    # x2 = np.linspace(0, len(acnt) - 1, len(acnt)) + 0.2
+    # plt.bar(x1, arate * 100, alpha=0.9, width=0.4, facecolor="orange", edgecolor="white")
+    # plt.bar(x2, erate * 100, alpha=0.9, width=0.4, facecolor="lightblue", edgecolor="white")
+    # # plt.legend() # 显示网格
+    # plt.suptitle(title)
+    # plt.show()
+    return psi
+
+
+def psi_chart(adata, edata, var, target, quant=10):
+    """
+        计算变量的PSI
+        :param adata: 基准时点数据集
+        :param edata: 比较时点数据集
+        :param var: 要比较的变量
+        :param target: 目标变量
+        :return: 返回变量的PSI表 及变量psi
+        变量的PSI一般要求小于0.1
+    """
+    minv = min(min(adata[var]), min(edata[var]))
+    maxv = max(max(adata[var]), max(edata[var]))
+    step = 1.0*(maxv-minv)/quant # 组距
+    cutOff = [minv] # 切点
+    for i in range(quant):
+        threshold = minv + step # 节点
+        minv += step
+        cutOff.append(threshold)
+    adata[var+'_bins'] = pd.cut(x=adata[var], bins=cutOff, right=False)
+    edata[var+'_bins'] = pd.cut(x=edata[var], bins=cutOff, right=False)
+    aGrouped = adata.groupby(var+'_bins')['target'].count()
+    eGrouped = edata.groupby(var+'_bins')['target'].count()
+    aGrouped = aGrouped.reset_index()
+    eGrouped = eGrouped.reset_index()
+    aGrouped = aGrouped.rename(columns={"target": r"基准时点分组样本数"})
+    eGrouped = eGrouped.rename(columns={"target": r"比较时点分组样本数"})
+    PSI_chart = aGrouped.merge(eGrouped, on=var+"_bins", how="left")
+    PSI_chart[r"基准时点分组样本占比"] = PSI_chart[r"基准时点分组样本数"]/PSI_chart[r"基准时点分组样本数"].sum() + 0.000001
+    PSI_chart[r"比较时点分组样本占比"] = PSI_chart[r"比较时点分组样本数"]/PSI_chart[r"比较时点分组样本数"].sum() + 0.000001
+    PSI_chart["PSI"] = (PSI_chart[r"比较时点分组样本占比"]-PSI_chart[r"基准时点分组样本占比"])*np.log(PSI_chart[r"比较时点分组样本占比"]/PSI_chart[r"基准时点分组样本占比"])
+    psi = PSI_chart["PSI"].sum()
+    return PSI_chart, psi
 
 
 def lift_chart(df):
@@ -757,43 +798,65 @@ def main():
 
     # （iii）对连续型变量进行分箱，包括（ii）中的变量
     continous_merged_dict = {}
-    for col in num_features:
-        # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
-        if -1 not in set(allData[col]):
-            # 分箱后的最多的箱数
-            max_interval = 5
-            cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
-            allData[col+'_Bin'] = allData[col].apply(lambda x: AssignBin(x, cutOff, special_attribute=[]))
-            monotone = BadRateMonotone(allData, col+'_Bin', 'target')
-            # print(monotone)
-            while (not monotone):
-                # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
-                max_interval -= 1
-                cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[],minBinPcnt=0)
-                allData[col + '_Bin'] = allData[col].apply(lambda x: AssignBin(x, cutOff, special_attribute=[]))
-                if max_interval == 2:
-                    # 当分箱数为2时，必然单调
-                    break
-                monotone = BadRateMonotone(allData, col + '_Bin', 'target')
-            newVar = col + '_Bin'
-            allData[newVar] = allData[col].map(lambda x:AssignBin(x, cutOff, special_attribute=[]))
-            var_bin_list.append(newVar)
-        else:
-            max_interval=5
-            # 如果有－1，则除去－1后，其他取值参与分箱
-            cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[-1], minBinPcnt=0)
-            allData[col+'_Bin'] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
-            monotone = BadRateMonotone(allData, col + '_Bin', 'target')
-            while (not monotone):
-                max_interval -= 1
+    monotone_dict = {}
+    err1 = []
+    for col in tqdm(num_features):
+        try:
+            # －1会当成特殊值处理。如果没有－1，则所有取值都参与分箱
+            if -1 not in set(allData[col]):
+                # 分箱后的最多的箱数
+                max_interval = 5
+                cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[], minBinPcnt=0)
+                allData[col+'_Bin'] = allData[col].apply(lambda x: AssignBin(x, cutOff, special_attribute=[]))
+                monotone = BadRateMonotone(allData, col+'_Bin', 'target')
+                if monotone is True:
+                    print('\n{}变量满足单调性'.format(col))
+                    monotone_dict[col + '_Bin'] = '单调'
+
+                else:
+                    print('\n{}变量不满足单调性'.format(col))
+                    monotone_dict[col + '_Bin'] = '不单调'
+                # print('{}变量满足单调性'.format(col))
+                # while (not monotone):
+                #     print('{}变量不满足单调性'.format(col))
+                    # 检验分箱后的单调性是否满足。如果不满足，则缩减分箱的个数。
+                    # max_interval -= 1
+                    # cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[],minBinPcnt=0)
+                    # allData[col + '_Bin'] = allData[col].apply(lambda x: AssignBin(x, cutOff, special_attribute=[]))
+                    # if max_interval == 2:
+                    #     # 当分箱数为2时，必然单调
+                    #     break
+                    # monotone = BadRateMonotone(allData, col + '_Bin', 'target')
+                newVar = col + '_Bin'
+                # allData[newVar] = allData[col].map(lambda x:AssignBin(x, cutOff, special_attribute=[]))
+                var_bin_list.append(newVar)
+
+            else:
+                max_interval=5
+                # 如果有－1，则除去－1后，其他取值参与分箱
                 cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[-1], minBinPcnt=0)
-                allData[col + '_Bin'] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
-                if max_interval == 3:
-                    break
-                monotone = BadRateMonotone(allData, col+'_Bin', 'target', ['Bin -1'])
-            newVar = col + '_Bin'
-            allData[newVar] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
-            var_bin_list.append(newVar)
+                allData[col+'_Bin'] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+                monotone = BadRateMonotone(allData, col + '_Bin', 'target')
+                if monotone is True:
+                    print('\n{}变量满足单调性'.format(col))
+                    monotone_dict[col + '_Bin'] = '单调'
+                else:
+                    print('\n{}变量不满足单调性'.format(col))
+                    monotone_dict[col + '_Bin'] = '不单调'
+                # print('{}变量满足单调性'.format(col))
+                # while (not monotone):
+                    # max_interval -= 1
+                    # cutOff = ChiMerge(allData, col, 'target', max_interval=max_interval, special_attribute=[-1], minBinPcnt=0)
+                    # allData[col + '_Bin'] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+                    # if max_interval == 3:
+                    #     break
+                    # monotone = BadRateMonotone(allData, col+'_Bin', 'target', ['Bin -1'])
+                newVar = col + '_Bin'
+                # allData[newVar] = allData[col].map(lambda x: AssignBin(x, cutOff, special_attribute=[-1]))
+                var_bin_list.append(newVar)
+        except (IndexError, ZeroDivisionError, RuntimeError):
+            print('{}变量分箱报错已保存')
+            err1.append(col)
         continous_merged_dict[col] = cutOff
         # 需要保存每个变量的分割点
         # save_variable_cutOffPoint = open('variable_cutOffPoint_dict.pkl','wb')
@@ -918,15 +981,18 @@ def main():
     basePoint = 600
     PDO = 20
     trainData['score'] = trainData['train_pred'].map(lambda x:Prob2Score(x, basePoint=basePoint, PDO=PDO))
-    # plt.hist(trainData['score'], 100)
-    # plt.xlabel('score')
-    # plt.ylabel('freq')
-    # plt.title('train_distribution')
+    plt.figure(figsize=(10, 8))
+    plt.subplot(1,2,1)
+    plt.hist(trainData['score'], 100)
+    plt.xlabel('score')
+    plt.ylabel('freq')
+    plt.title('train_distribution')
     testData['score'] = testData['test_pred'].map(lambda x: Prob2Score(x, basePoint=basePoint, PDO=PDO))
-    # plt.hist(testData['score'], 100)
-    # plt.xlabel('score')
-    # plt.ylabel('freq')
-    # plt.title('test_distribution')
+    plt.subplot(1,2,2)
+    plt.hist(testData['score'], 100)
+    plt.xlabel('score')
+    plt.ylabel('freq')
+    plt.title('test_distribution')
 
     # 计算基尼指数
     gini = Gini(testData,'score','target')
@@ -934,12 +1000,18 @@ def main():
     # 计算LIFT提升度
     lift = lift_chart(testData)
 
-    lorenz = draw_lorenz(testData)
+    # 计算模型的PSI
+    model_psi = psi(trainData['train_pred'], testData['test_pred'])
 
+    # 计算变量的PSI
+    value_psi_dict = {}
+    # 数字型变量计算psi
+    for var in num_features:
+        PSI_chart, value_psi = psi_chart(adata=trainData, edata=testData,var=var, target='target',quant=10)
+        value_psi_dict[var] = value_psi
 
     from sklearn.metrics import roc_curve, auc
-    ps = psi(trainData, testData)
-    fpr, tpr, threshold = roc_curve(y_test, test_pred)
+    fpr, tpr, threshold = roc_curve(y_train, train_pred)
     AUC = auc(fpr, tpr)
     train_ks = max(abs(tpr-fpr))
 
