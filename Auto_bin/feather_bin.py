@@ -763,7 +763,14 @@ def main():
     feature_file = sys.argv[1]
     file_path=os.getcwd()
     if 'xlsx' in feature_file or 'xls' in feature_file:
-        df = pd.read_excel(file_path+'/'+feature_file,encoding='gbk')
+        for decode in ('gbk', 'utf-8', 'gb18030'):
+            try:
+                df = pd.read_excel(file_path+'/'+feature_file, encoding=decode, error_bad_lines=False)
+                print('data-' + decode + '-success!!')
+                break
+            except:
+                pass
+        # df = pd.read_excel(file_path+'/'+feature_file,encoding='gbk')
     else:
         for decode in ('gbk', 'utf-8', 'gb18030'):
             try:
@@ -773,12 +780,12 @@ def main():
             except:
                 pass
 
-    df = pd.read_csv('gm_model.csv')
+    # df = pd.read_csv('gm_model.csv')
 
     df_feature = df.drop(['id_card_no', 'card_name', 'loan_date'], axis=1)
     result_bin = get_feature_result(df_feature, 'label')
     # print(result_bin)
-    result_bin.to_csv('estimate_result.csv', sep=',', encoding='gbk', index=False)
+    result_bin.to_csv('estimate_result.csv', sep=',', encoding='utf-8', index=False)
 
 
 if __name__ == '__main__':
