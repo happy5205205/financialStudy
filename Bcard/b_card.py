@@ -464,7 +464,7 @@ def KS(df, score, target):
 def main():
     folderOfData = 'D:/financialStudy/Bcard/data/'
     trainData = pd.read_csv(folderOfData + 'trainData.csv', header=0)
-
+    testData = pd.read_csv(folderOfData + 'testData.csv', header=0)
     allFeatures = []
     '''
     逾期类型的特征在行为评分卡（预测违约行为）中，一般是非常显著的变量。
@@ -846,7 +846,7 @@ def main():
             intercept                -1.810598   0.000000e+00
     '''
     from sklearn.metrics import roc_auc_score
-    X_train['train_pred'] = logit_result.predict(X_train)
+    trainData['train_pred'] = logit_result.predict(X_train)
     train_ks = KS(trainData, 'train_pred', 'label')
     train_auc = roc_auc_score(trainData['label'], trainData['train_pred'])
 
@@ -855,14 +855,33 @@ def main():
     ###################################
     # 准备WOE编码后的变量
 
+    modelFeatures = [var.replace('_Bin_WOE', '') for var in featuresInModel]
 
+    numFeatures = [i for i in modelFeatures if i in numericalFeatures]
+    charFeatures = [i for i in modelFeatures if i in categoricalFeatures]
 
+    testData['maxDelqL1M'] = testData.apply(lambda x: DelqFeatures(x, 1, 'max delq'), axis=1)
+    testData['maxDelqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'max delq'), axis=1)
+    # testData['M2FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M2 times'), axis=1)
+    testData['M0FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M0 times'), axis=1)
+    testData['M1FreqL6M'] = testData.apply(lambda x: DelqFeatures(x, 6, 'M1 times'), axis=1)
+    testData['M2FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M2 times'), axis=1)
+    # testData['M1FreqL12M'] = testData.apply(lambda x: DelqFeatures(x, 12, 'M1 times'), axis=1)
+    # testData['maxUrateL6M'] = testData.apply(lambda x: UrateFeatures(x,6,'max utilization rate'),axis = 1)
+    testData['avgUrateL1M'] = testData.apply(lambda x: UrateFeatures(x, 1, 'mean utilization rate'), axis=1)
+    testData['avgUrateL3M'] = testData.apply(lambda x: UrateFeatures(x, 3, 'mean utilization rate'), axis=1)
+    # testData['avgUrateL6M'] = testData.apply(lambda x: UrateFeatures(x,6, 'mean utilization rate'),axis=1)
+    testData['increaseUrateL6M'] = testData.apply(lambda x: UrateFeatures(x, 6, 'increase utilization rate'), axis=1)
+    # testData['avgPayL3M'] = testData.apply(lambda x: PaymentFeatures(x, 3, 'mean payment ratio'),axis=1)
+    # testData['avgPayL6M'] = testData.apply(lambda x: PaymentFeatures(x, 6, 'mean payment ratio'),axis=1)
 
+    testData['M2FreqL3M_Bin'] = testData['M2FreqL3M'].apply(lambda x: int(x >= 1))
+    testData['maxDelqL1M_Bin'] = testData['maxDelqL1M'].apply(lambda x: MergeByCondition(x, ['==0', '==1', '>=2']))
+    testData['maxDelqL3M_Bin'] = testData['maxDelqL3M'].apply(lambda x: MergeByCondition(x, ['==0', '==1', '>=2']))
 
-
-
-
-
+    for var in numFeatures:
+        newBin = var +'_Bin'
+        bin = [list(i.values())[0] for i in bin_dict if var in i.keys()][0]
 
 
 if __name__ == '__main__':
