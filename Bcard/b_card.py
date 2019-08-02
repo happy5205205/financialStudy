@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-
+from tqdm import tqdm
 
 def DelqFeatures(event, window, type):
     """
@@ -549,10 +549,10 @@ def main():
     trainData.groupby(['maxDelqL6M'])['label'].mean()
     trainData.groupby(['maxDelqL12M'])['label'].mean()
 
-    for x in allFeatures:
-        for y in allFeatures:
-            if x != y:
-                print(x, '   ', y, '    ', np.corrcoef(trainData[x], trainData[y])[0, 1])
+    # for x in allFeatures:
+    #     for y in allFeatures:
+    #         if x != y:
+    #             print(x, '   ', y, '    ', np.corrcoef(trainData[x], trainData[y])[0, 1])
 
     ############################
     #   2, 分箱，计算WOE并编码   #
@@ -594,7 +594,7 @@ def main():
     large_bin_var = []
     N = trainData.shape[0]
 
-    for var in categoricalFeatures:
+    for var in tqdm(categoricalFeatures):
         if var not in not_monotone:
             total = trainData.groupby(var)[var].count()
             pcnt = total * 1.0 / N
@@ -604,11 +604,15 @@ def main():
                 large_bin_var.append(var)
 
     # 直接剔除类别型特征某个分箱占比于0.9以上的变量
-    for i in range(len(small_bin_var)):
-        for k in small_bin_var[i].values():
-            for g in k.values():
-                if g > 0.9:
-                    small_bin_var.pop(i)
+    distanc = len(small_bin_var)
+    for i in range(1, distanc):
+        for k in small_bin_var[i-1].values():
+            if max(list(k.values())) > 0.9:
+                distanc -= 1
+                small_bin_var.pop(i)
+
+
+
 
     trainData['maxDelqL1M_Bin'] = trainData['maxDelqL1M'].apply(lambda x: MergeByCondition(x, ['==0', '==1', '>=2']))
     trainData['maxDelqL3M_Bin'] = trainData['maxDelqL3M'].apply(lambda x: MergeByCondition(x, ['==0', '==1', '>=2']))
@@ -624,7 +628,7 @@ def main():
     3，每箱占比不低于5%
     '''
     bin_dict = []
-    for var in numericalFeatures:
+    for var in tqdm(numericalFeatures):
         binNum = 5
         newBin = var + '_Bin'
         bin = ChiMerge(trainData, var, 'label', max_interval=binNum, minBinPcnt=0.05)
@@ -921,6 +925,7 @@ def main():
     PDO = 20
     testData['score'] = testData['test_pred'].apply(lambda x:Prob2Score(x, basePoint=basePoint, PDO=PDO))
     plt.hist(testData['score'], bins=100)
+
 
 if __name__ == '__main__':
     main()
