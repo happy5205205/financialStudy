@@ -458,6 +458,20 @@ def KS(df, score, target):
     KS = all.apply(lambda x: x.badCumRate - x.goodCumRate, axis=1)
     return max(KS)
 
+
+def Prob2Score(prob, basePoint, PDO):
+    """
+        将概率映射成分数
+        :param prob:
+        :param basePoint:
+        :param PDO:
+        :return:
+    """
+    y = np.log(prob/(1-prob))
+    score = int(basePoint + PDO/np.log(2)*-y)
+    return score
+
+
 #################################
 #   1, 读取数据，衍生初始变量   #
 #################################
@@ -862,27 +876,51 @@ def main():
 
     testData['maxDelqL1M'] = testData.apply(lambda x: DelqFeatures(x, 1, 'max delq'), axis=1)
     testData['maxDelqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'max delq'), axis=1)
-    # testData['M2FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M2 times'), axis=1)
+    testData['M2FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M2 times'), axis=1)
     testData['M0FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M0 times'), axis=1)
     testData['M1FreqL6M'] = testData.apply(lambda x: DelqFeatures(x, 6, 'M1 times'), axis=1)
     testData['M2FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M2 times'), axis=1)
-    # testData['M1FreqL12M'] = testData.apply(lambda x: DelqFeatures(x, 12, 'M1 times'), axis=1)
-    # testData['maxUrateL6M'] = testData.apply(lambda x: UrateFeatures(x,6,'max utilization rate'),axis = 1)
+    testData['M1FreqL12M'] = testData.apply(lambda x: DelqFeatures(x, 12, 'M1 times'), axis=1)
+    testData['maxUrateL6M'] = testData.apply(lambda x: UrateFeatures(x,6,'max utilization rate'),axis = 1)
     testData['avgUrateL1M'] = testData.apply(lambda x: UrateFeatures(x, 1, 'mean utilization rate'), axis=1)
     testData['avgUrateL3M'] = testData.apply(lambda x: UrateFeatures(x, 3, 'mean utilization rate'), axis=1)
-    # testData['avgUrateL6M'] = testData.apply(lambda x: UrateFeatures(x,6, 'mean utilization rate'),axis=1)
+    testData['avgUrateL6M'] = testData.apply(lambda x: UrateFeatures(x,6, 'mean utilization rate'),axis=1)
     testData['increaseUrateL6M'] = testData.apply(lambda x: UrateFeatures(x, 6, 'increase utilization rate'), axis=1)
-    # testData['avgPayL3M'] = testData.apply(lambda x: PaymentFeatures(x, 3, 'mean payment ratio'),axis=1)
-    # testData['avgPayL6M'] = testData.apply(lambda x: PaymentFeatures(x, 6, 'mean payment ratio'),axis=1)
+    testData['avgPayL3M'] = testData.apply(lambda x: PaymentFeatures(x, 3, 'mean payment ratio'),axis=1)
+    testData['avgPayL6M'] = testData.apply(lambda x: PaymentFeatures(x, 6, 'mean payment ratio'),axis=1)
+    testData['M1FreqL3M'] = testData.apply(lambda x: DelqFeatures(x, 3, 'M1 times'), axis=1)
 
     testData['M2FreqL3M_Bin'] = testData['M2FreqL3M'].apply(lambda x: int(x >= 1))
+    testData['M1FreqL3M'] = testData['M1FreqL3M'].apply(lambda x: int(x >= 1))
     testData['maxDelqL1M_Bin'] = testData['maxDelqL1M'].apply(lambda x: MergeByCondition(x, ['==0', '==1', '>=2']))
     testData['maxDelqL3M_Bin'] = testData['maxDelqL3M'].apply(lambda x: MergeByCondition(x, ['==0', '==1', '>=2']))
 
     for var in numFeatures:
         newBin = var +'_Bin'
         bin = [list(i.values())[0] for i in bin_dict if var in i.keys()][0]
+        testData[newBin] = testData[var].apply(lambda x: AssignBin(x, bin))
 
+    finalFeature = [i + '_Bin' for i in numFeatures+charFeatures]
+    for var in finalFeature:
+        var2 = var + '_WOE'
+        testData[var2] = testData[var].map(lambda x: WOE_IV_dict[var]['WOE'][x])
+
+    X_test = testData[featuresInModel]
+    X_test['intercept'] = [1]*testData.shape[0]
+    y_test = testData['label']
+    logit = sm.Logit(y_test, X_test)
+    logit_result = logit.fit()
+    testData['test_pred'] = logit_result.predict(X_test)
+    test_ks = KS(testData, 'test_pred', 'label')
+    test_auc = roc_auc_score(testData['label'], testData['test_pred'])
+
+    ##########################
+    #   6，在测试集上计算分数   #
+    ##########################
+    basePoint = 500
+    PDO = 20
+    testData['score'] = testData['test_pred'].apply(lambda x:Prob2Score(x, basePoint=basePoint, PDO=PDO))
+    plt.hist(testData['score'], bins=100)
 
 if __name__ == '__main__':
     main()
